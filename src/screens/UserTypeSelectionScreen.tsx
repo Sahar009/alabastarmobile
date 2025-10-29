@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Calendar, Briefcase, Upload, DollarSign } from 'lucide-react-native';
+import { Search, Calendar, Briefcase, Upload, Wallet } from 'lucide-react-native';
 
 const { height } = Dimensions.get('window');
 
@@ -28,7 +28,7 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
 
   const providerFeatures = [
     { icon: Upload, text: 'Upload services' },
-    { icon: DollarSign, text: 'Earn money' }
+    { icon: Wallet, text: 'Earn in Naira (₦)' }
   ];
 
   const handleTypeSelection = (type: 'user' | 'provider') => {

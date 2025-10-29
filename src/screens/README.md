@@ -53,3 +53,4 @@ All screens use the Alabastar color scheme:
 
 - Logo: `assets/logo.png` (copied from frontend)
 - Decorative elements: CSS circles with gradient backgrounds
+

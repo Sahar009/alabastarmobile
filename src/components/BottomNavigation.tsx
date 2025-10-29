@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { Home, Search, Calendar, User } from 'lucide-react-native';
+import { Home, Search, Calendar, MessageSquare, User } from 'lucide-react-native';
 
 interface BottomNavigationProps {
   activeTab: string;
@@ -15,8 +15,9 @@ interface BottomNavigationProps {
 const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'search', label: 'Search', icon: Search },
+    { id: 'search', label: 'Services', icon: Search },
     { id: 'bookings', label: 'Bookings', icon: Calendar },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 

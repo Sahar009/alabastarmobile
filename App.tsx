@@ -11,6 +11,7 @@ import {
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiService } from './src/services/api';
 import { 
   OnboardingNavigator, 
   UserTypeSelectionScreen, 
@@ -18,10 +19,15 @@ import {
   ProvidersScreen, 
   SplashScreen,
   HomeScreen,
-  LocationSelectionScreen
+  LocationSelectionScreen,
+  ProfileScreen,
+  NotificationsScreen,
+  BookingsScreen,
+  MessagingScreen
 } from './src/screens';
+import BottomNavigation from './src/components/BottomNavigation';
 
-type AppScreen = 'onboarding' | 'user-type-selection' | 'auth' | 'home' | 'location-selection' | 'providers';
+type AppScreen = 'onboarding' | 'user-type-selection' | 'auth' | 'home' | 'location-selection' | 'providers' | 'profile' | 'notifications' | 'bookings' | 'messages';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -30,12 +36,33 @@ function App() {
   const [_isAuthenticated, _setIsAuthenticated] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('onboarding');
+  const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
 
   useEffect(() => {
     checkFirstLaunch();
+    checkAuthState();
   }, []);
+
+  const checkAuthState = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const userJson = await AsyncStorage.getItem('user');
+      
+      if (token && userJson) {
+        const user = JSON.parse(userJson);
+        setUserData(user);
+        _setIsAuthenticated(true);
+        setCurrentScreen('home');
+        
+        // Load token into apiService for future API calls
+        await apiService.loadToken();
+      }
+    } catch (error) {
+      console.error('Error checking auth state:', error);
+    }
+  };
 
   const checkFirstLaunch = async () => {
     try {
@@ -113,6 +140,31 @@ function App() {
     setCurrentScreen('providers');
   };
 
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    
+    // Handle tab navigation based on active tab
+    switch(tab) {
+      case 'home':
+        setCurrentScreen('home');
+        break;
+      case 'search':
+        setCurrentScreen('home'); // Navigate to providers search
+        break;
+      case 'bookings':
+        setCurrentScreen('bookings');
+        break;
+      case 'messages':
+        setCurrentScreen('messages');
+        break;
+      case 'profile':
+        setCurrentScreen('profile');
+        break;
+      default:
+        setCurrentScreen('home');
+    }
+  };
+
   if (isFirstLaunch === null) {
     // Show loading screen or splash screen
     return (
@@ -146,6 +198,11 @@ function App() {
             onCategorySelect={handleSelectCategory}
             userData={userData}
             selectedLocation={selectedLocation || 'Lagos'}
+            onNavigate={(screen: string) => {
+              if (screen === 'notifications') {
+                setCurrentScreen('notifications');
+              }
+            }}
           />
         );
       
@@ -169,16 +226,69 @@ function App() {
           />
         );
       
+      case 'profile':
+        return (
+          <ProfileScreen 
+            userData={userData}
+            onLogout={handleLogout}
+            onNavigate={(screen) => {
+              // Handle navigation to other screens from profile
+              console.log('Navigate to:', screen);
+            }}
+          />
+        );
+      
+      case 'notifications':
+        return (
+          <NotificationsScreen 
+            userData={userData}
+            onNavigate={(screen) => {
+              // Handle navigation to other screens from notifications
+              console.log('Navigate to:', screen);
+            }}
+          />
+        );
+      
+      case 'bookings':
+        return (
+          <BookingsScreen 
+            userData={userData}
+            onNavigate={(screen) => {
+              // Handle navigation to other screens from bookings
+              console.log('Navigate to:', screen);
+            }}
+          />
+        );
+      
+      case 'messages':
+        return (
+          <MessagingScreen 
+            userData={userData}
+            onNavigate={(screen) => {
+              setCurrentScreen(screen as AppScreen);
+            }}
+          />
+        );
+      
       default:
         return <OnboardingNavigator onComplete={handleOnboardingComplete} />;
     }
   };
+
+  // Determine if we should show bottom navigation
+  const shouldShowBottomNav = _isAuthenticated && ['home', 'profile', 'providers', 'notifications', 'bookings', 'messages'].includes(currentScreen);
 
   return (
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={styles.container}>
         {renderCurrentScreen()}
+        {shouldShowBottomNav && (
+          <BottomNavigation 
+            activeTab={activeTab} 
+            onTabChange={handleTabChange}
+          />
+        )}
       </View>
     </SafeAreaProvider>
   );

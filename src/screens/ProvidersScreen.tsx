@@ -27,6 +27,7 @@ import {
   X,
   RefreshCw
 } from 'lucide-react-native';
+import { providerService, type Provider as ProviderType, type ProviderFilters } from '../services/providerService';
 
 const { height } = Dimensions.get('window');
 
@@ -38,31 +39,8 @@ interface ProvidersScreenProps {
   selectedLocation: string;
 }
 
-interface Provider {
-  id: string;
-  user: {
-    fullName: string;
-    email: string;
-    phone: string;
-    avatarUrl: string;
-  };
-  businessName: string;
-  category: string;
-  subcategories: string[];
-  locationCity: string;
-  locationState: string;
-  ratingAverage: number;
-  ratingCount: number;
-  startingPrice: number;
-  hourlyRate: number;
-  bio: string;
-  verificationStatus: string;
-  isAvailable: boolean;
-  estimatedArrival: string;
-  yearsOfExperience: number;
-  brandImages: any[];
-  isTopListed: boolean;
-}
+// Using Provider type from providerService
+type Provider = ProviderType;
 
 const ProvidersScreen: React.FC<ProvidersScreenProps> = ({ 
   userData: _userData, 
@@ -77,9 +55,12 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [_showSort, _setShowSort] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
-  const [priceFilter, setPriceFilter] = useState<{ min: number; max: number } | null>(null);
+  const [priceFilter, setPriceFilter] = useState<{ min: number; max: number }>({ min: 0, max: 50000 });
   const [availabilityFilter, setAvailabilityFilter] = useState(false);
+  const [sortBy, setSortBy] = useState<'price' | 'rating' | 'distance' | 'reviews'>('rating');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const categoryIcons: { [key: string]: any } = {
     plumbing: Wrench,
@@ -172,53 +153,19 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const fetchProviders = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const base = "http://localhost:8000/api";
-      
-      let apiUrl = '';
-      const searchParams = new URLSearchParams();
-      
+      const filters: ProviderFilters = {
+        location: selectedLocation,
+      };
+
+      let data;
       if (selectedCategory) {
-        apiUrl = `${base}/providers/category/${selectedCategory}`;
-        if (selectedLocation) searchParams.append('location', selectedLocation);
+        data = await providerService.getProvidersByCategory(selectedCategory, filters);
       } else {
-        apiUrl = `${base}/providers/search`;
-        searchParams.append('search', '');
-        if (selectedLocation) searchParams.append('location', selectedLocation);
+        data = await providerService.searchProviders(filters);
       }
       
-      const fullUrl = searchParams.toString() ? `${apiUrl}?${searchParams.toString()}` : apiUrl;
-      
-      const response = await fetch(fullUrl);
-      const data = await response.json();
-      
       if (data.success && data.data?.providers) {
-        const providersWithRatings: Provider[] = data.data.providers.map((provider: any) => ({
-          id: provider.id,
-          user: {
-            fullName: provider.User?.fullName || 'Provider',
-            email: provider.User?.email || '',
-            phone: provider.User?.phone || '',
-            avatarUrl: provider.User?.avatarUrl || ''
-          },
-          businessName: provider.businessName || provider.User?.fullName || 'Business',
-          category: provider.category,
-          subcategories: provider.subcategories || [],
-          locationCity: provider.locationCity || selectedLocation,
-          locationState: provider.locationState || 'State',
-          ratingAverage: provider.ratingAverage || 0,
-          ratingCount: provider.ratingCount || 0,
-          startingPrice: provider.startingPrice || 5000,
-          hourlyRate: provider.hourlyRate || 2000,
-          bio: provider.bio || `Professional ${provider.category} service provider`,
-          verificationStatus: provider.verificationStatus || 'verified',
-          isAvailable: provider.isAvailable !== false,
-          estimatedArrival: provider.estimatedArrival || '30 mins',
-          yearsOfExperience: provider.yearsOfExperience || 3,
-          brandImages: provider.brandImages || [],
-          isTopListed: provider.isTopListed || false,
-        }));
-        
-        setProviders(providersWithRatings);
+        setProviders(data.data.providers);
       } else {
         // Fallback to mock data
         setProviders(getMockProviders());
@@ -242,36 +189,22 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   }, [fetchProviders]);
 
   const applyFilters = React.useCallback(() => {
-    let filtered = [...providers];
+    // Apply filters using the service
+    const filters: Partial<ProviderFilters> = {
+      search: searchQuery || undefined,
+      minRating: ratingFilter || undefined,
+      minPrice: priceFilter.min || undefined,
+      maxPrice: priceFilter.max || undefined,
+      available: availabilityFilter || undefined,
+    };
 
-    // Search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(provider =>
-        provider.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        provider.user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        provider.subcategories.some(sub => sub.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
-
-    // Rating filter
-    if (ratingFilter) {
-      filtered = filtered.filter(provider => provider.ratingAverage >= ratingFilter);
-    }
-
-    // Price filter
-    if (priceFilter) {
-      filtered = filtered.filter(provider => 
-        provider.hourlyRate >= priceFilter.min && provider.hourlyRate <= priceFilter.max
-      );
-    }
-
-    // Availability filter
-    if (availabilityFilter) {
-      filtered = filtered.filter(provider => provider.isAvailable);
-    }
-
-    setFilteredProviders(filtered);
-  }, [providers, searchQuery, ratingFilter, priceFilter, availabilityFilter]);
+    let filtered = providerService.filterProviders(providers, filters);
+    
+    // Apply sorting
+    const sorted = providerService.sortProviders(filtered, sortBy, sortOrder);
+    
+    setFilteredProviders(sorted);
+  }, [providers, searchQuery, ratingFilter, priceFilter, availabilityFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchProviders();
@@ -284,8 +217,10 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const clearFilters = () => {
     setSearchQuery('');
     setRatingFilter(null);
-    setPriceFilter(null);
+    setPriceFilter({ min: 0, max: 50000 });
     setAvailabilityFilter(false);
+    setSortBy('rating');
+    setSortOrder('desc');
   };
 
   const getCategoryIcon = (category: string) => {

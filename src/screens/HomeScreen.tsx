@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,33 +9,32 @@ import {
   Image,
   RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BottomNavigation } from '../components';
 import { 
   Search, 
   MapPin, 
   Star, 
-  Wrench, 
-  Zap, 
-  Sparkles, 
-  Package, 
-  Snowflake, 
-  Hammer,
-  Palette, 
-  Bug, 
-  Shirt, 
-  Square, 
-  Video, 
-  Sprout, 
-  Settings, 
-  Key, 
-  Sofa,
-  Droplets,
-  ChefHat,
-  Camera,
   Clock,
-  Lightbulb,
-  RefreshCw
+  RefreshCw,
+  Bell,
+  Wrench,
+  Sofa,
+  ChefHat,
+  Droplets,
+  Plug,
+  Sparkles,
+  Truck,
+  Snowflake,
+  HardHat,
+  Paintbrush,
+  Bug,
+  ImageIcon as IronIcon,
+  Grid3x3,
+  Monitor,
+  Flower,
+  Box,
+  Lock
 } from 'lucide-react-native';
 
 const { height, width } = Dimensions.get('window');
@@ -44,6 +43,7 @@ interface HomeScreenProps {
   onCategorySelect: (category: string) => void;
   userData: any;
   selectedLocation?: string;
+  onNavigate?: (screen: string) => void;
 }
 
 interface FeaturedService {
@@ -59,31 +59,74 @@ interface FeaturedService {
   brandImages?: any[];
 }
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, selectedLocation = 'Lagos' }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, selectedLocation = 'Lagos', onNavigate }) => {
   const [_searchQuery, _setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('home');
   const [featuredServices, setFeaturedServices] = useState<FeaturedService[]>([]);
   const [isLoadingFeatured, setIsLoadingFeatured] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [categories, setCategories] = useState<Array<{
+    id: string;
+    name: string;
+    icon: any;
+    iconImage?: any;
+    color: string;
+    image: string;
+    description: string;
+  }>>([]);
+  const [popularServices, setPopularServices] = useState<Array<{
+    name: string;
+    category: string;
+    icon: any;
+  }>>([]);
 
-  const categoryIcons: { [key: string]: any } = {
-    plumbing: Droplets,
-    electrical: Zap,
-    cleaning: Sparkles,
-    moving: Package,
-    ac_repair: Snowflake,
-    carpentry: Hammer,
-    painting: Palette,
-    pest_control: Bug,
-    laundry: Shirt,
-    tiling: Square,
-    cctv: Video,
-    gardening: Sprout,
-    appliance_repair: Settings,
-    locksmith: Key,
-    carpet_cleaning: Sofa,
-    cooking: Lightbulb,
-  };
+  const categoryIcons: { [key: string]: any } = useMemo(() => ({
+    plumbing: Droplets, // Water droplets for plumbing
+    electrical: Plug, // Power plug for electrical
+    cleaning: Sparkles, // Sparkles for cleaning
+    moving: Truck, // Truck for moving
+    ac_repair: Snowflake, // Snowflake for AC repair
+    carpentry: HardHat, // Hard hat for carpentry
+    painting: Paintbrush, // Paint brush for painting
+    pest_control: Bug, // Bug icon for pest control
+    laundry: IronIcon, // Iron icon for laundry
+    tiling: Grid3x3, // Grid for tiling
+    cctv: Monitor, // Monitor for CCTV
+    gardening: Flower, // Flower for gardening
+    appliance_repair: Box, // Box for appliance repair
+    locksmith: Lock, // Lock for locksmith
+    carpet_cleaning: Sofa, // Sofa for carpet cleaning
+    cooking: ChefHat, // Chef hat for cooking
+  }), []);
+
+  // 2D Image paths for categories
+  // Add these images to alabastarmobile/assets/ folder
+  const categoryImages: { [key: string]: any } = useMemo(() => {
+    try {
+      return {
+        plumbing: require('../../assets/plumber2d.png'),
+        electrical: require('../../assets/mechanic2d.png'),
+        cleaning: require('../../assets/cleaner2d.png'),
+        moving: require('../../assets/mover2d.png'),
+        ac_repair: require('../../assets/ac2d.png'),
+        carpentry: require('../../assets/carpenter2d.png'),
+        painting: require('../../assets/paint2d.png'),
+        pest_control: require('../../assets/pest2d.png'),
+        laundry: require('../../assets/laundry2d.png'),
+        tiling: require('../../assets/tiler2d.png'),
+        cctv: require('../../assets/cctv2d.png'),
+        gardening: require('../../assets/gardener2d.png'),
+        appliance_repair: require('../../assets/mechanic2d.png'),
+        locksmith: require('../../assets/mechanic2d.png'),
+        carpet_cleaning: require('../../assets/cleaner2d.png'),
+        cooking: require('../../assets/baker2d.png'),
+      };
+    } catch {
+      // If images don't exist, return empty object (will fall back to icons)
+      console.warn('Category images not found. Using icons instead.');
+      return {};
+    }
+  }, []);
 
   const getMockFeaturedServices = useCallback((): FeaturedService[] => {
     return [
@@ -208,29 +251,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     }
   }, [selectedLocation, getMockFeaturedServices]);
 
-  useEffect(() => {
-    fetchFeaturedServices();
-  }, [fetchFeaturedServices]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await fetchFeaturedServices();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [fetchFeaturedServices]);
-
-
-  const getCategoryIcon = (category: string) => {
-    return categoryIcons[category] || Wrench;
-  };
-
-  const handleFeaturedServicePress = (service: FeaturedService) => {
-    onCategorySelect(service.category);
-  };
-
-  const categories = [
+  // Hardcoded categories as fallback (will be replaced by API data)
+  const hardcodedCategories = useMemo(() => [
     { 
       id: 'plumbing', 
       name: 'Plumbing', 
@@ -242,7 +264,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'electrical', 
       name: 'Electrical', 
-      icon: Zap, 
+      icon: Plug, 
       color: '#f59e0b',
       image: '/images/mechanic2d.png',
       description: 'Wiring, outlets, electrical repairs'
@@ -258,7 +280,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'moving', 
       name: 'Moving', 
-      icon: Package, 
+      icon: Truck, 
       color: '#8b5cf6',
       image: '/images/mover2d.png',
       description: 'Moving services, packing'
@@ -274,7 +296,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'carpentry', 
       name: 'Carpentry', 
-      icon: Hammer, 
+      icon: HardHat, 
       color: '#d97706',
       image: '/images/carpenter2d.png',
       description: 'Furniture repair, woodwork'
@@ -282,7 +304,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'painting', 
       name: 'Painting', 
-      icon: Palette, 
+      icon: Paintbrush, 
       color: '#ef4444',
       image: '/images/paint2d.png',
       description: 'Interior & exterior painting'
@@ -298,7 +320,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'laundry', 
       name: 'Laundry', 
-      icon: Shirt, 
+      icon: IronIcon, 
       color: '#ec4899',
       image: '/images/laundry2d.png',
       description: 'Dry cleaning, ironing'
@@ -306,7 +328,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'tiling', 
       name: 'Tiling', 
-      icon: Square, 
+      icon: Grid3x3, 
       color: '#6b7280',
       image: '/images/tiler2d.png',
       description: 'Floor & wall tiling'
@@ -314,7 +336,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'cctv', 
       name: 'CCTV', 
-      icon: Camera, 
+      icon: Monitor, 
       color: '#1f2937',
       image: '/images/cctv2d.png',
       description: 'Security camera installation'
@@ -322,7 +344,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'gardening', 
       name: 'Gardening', 
-      icon: Sprout, 
+      icon: Flower, 
       color: '#16a34a',
       image: '/images/gardener2d.png',
       description: 'Lawn care, landscaping'
@@ -330,7 +352,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'appliance_repair', 
       name: 'Appliance Repair', 
-      icon: Settings, 
+      icon: Box, 
       color: '#7c3aed',
       image: '/images/mechanic2d.png',
       description: 'Home appliance repairs'
@@ -338,7 +360,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     { 
       id: 'locksmith', 
       name: 'Locksmith', 
-      icon: Key, 
+      icon: Lock, 
       color: '#dc2626',
       image: '/images/mechanic2d.png',
       description: 'Lock repair & key duplication'
@@ -359,14 +381,140 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       image: '/images/cleaner2d.png',
       description: 'Personal chef, meal prep'
     }
-  ];
+  ], []);
 
-  const popularServices = [
-    { name: 'Emergency Plumber', category: 'plumbing', icon: Droplets },
-    { name: 'House Cleaning', category: 'cleaning', icon: Sparkles },
-    { name: 'Electrician', category: 'electrical', icon: Zap },
-    { name: 'Painter', category: 'painting', icon: Palette },
-  ];
+  // Fetch categories from API
+  const fetchCategories = useCallback(async () => {
+    try {
+      const base = "http://localhost:8000/api";
+      const response = await fetch(`${base}/providers/categories`);
+      const data = await response.json();
+      
+      if (data.success && data.data?.categories) {
+        const apiCategories = data.data.categories.map((cat: any, index: number) => {
+          const icon = categoryIcons[cat.slug] || Wrench;
+          const iconImage = categoryImages[cat.slug];
+          const colors = [
+            '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', 
+            '#06b6d4', '#d97706', '#ef4444', '#84cc16',
+            '#ec4899', '#6b7280', '#1f2937', '#16a34a',
+            '#7c3aed', '#dc2626', '#059669', '#ea580c'
+          ];
+          return {
+            id: cat.slug,
+            name: cat.name,
+            icon: icon,
+            iconImage: iconImage,
+            color: colors[index % colors.length],
+            image: '/images/' + cat.slug + '2d.png',
+            description: cat.description || 'Service category'
+          };
+        });
+        
+        // Set popular services from first 4 categories
+        const popular = apiCategories.slice(0, 4).map((cat: any) => ({
+          name: cat.name,
+          category: cat.id,
+          icon: cat.icon
+        }));
+        setPopularServices(popular);
+        
+        // Limit to first 14 categories
+        setCategories(apiCategories.slice(0, 14));
+      } else {
+        // Fallback to hardcoded categories with iconImage
+        const categoriesWithImages = hardcodedCategories.map((cat: any) => ({
+          ...cat,
+          iconImage: categoryImages[cat.id]
+        }));
+        
+        // Set popular services from first 4 fallback categories
+        const popular = categoriesWithImages.slice(0, 4).map((cat: any) => ({
+          name: cat.name,
+          category: cat.id,
+          icon: cat.icon
+        }));
+        setPopularServices(popular);
+        
+        setCategories(categoriesWithImages.slice(0, 14));
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      // Fallback to hardcoded categories with iconImage
+      const categoriesWithImages = hardcodedCategories.map((cat: any) => ({
+        ...cat,
+        iconImage: categoryImages[cat.id]
+      }));
+      
+      // Set popular services from first 4 fallback categories
+      const popular = categoriesWithImages.slice(0, 4).map((cat: any) => ({
+        name: cat.name,
+        category: cat.id,
+        icon: cat.icon
+      }));
+      setPopularServices(popular);
+      
+      setCategories(categoriesWithImages.slice(0, 14));
+    }
+  }, [categoryIcons, categoryImages, hardcodedCategories]);
+  
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  useEffect(() => {
+    fetchFeaturedServices();
+  }, [fetchFeaturedServices]);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const base = 'http://localhost:8000';
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${base}/api/notifications/unread-count`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUnreadCount(data.data?.unreadCount || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching unread count:', error);
+      }
+    };
+
+    if (userData) {
+      fetchUnreadCount();
+    }
+  }, [userData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchFeaturedServices(),
+        fetchCategories()
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchFeaturedServices, fetchCategories]);
+
+
+  const getCategoryIcon = (category: string) => {
+    return categoryIcons[category] || Wrench;
+  };
+
+  const handleFeaturedServicePress = (service: FeaturedService) => {
+    onCategorySelect(service.category);
+  };
 
   const handleCategoryPress = (categoryId: string) => {
     onCategorySelect(categoryId);
@@ -422,6 +570,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                   style={refreshing ? styles.refreshingIcon : null}
                 />
               </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.notificationButton}
+                onPress={() => onNavigate?.('notifications')}
+              >
+                <Bell size={20} color="#ec4899" />
+                <View style={[styles.badge, unreadCount === 0 && styles.badgeEmpty]}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
           <Text style={styles.subtitle}>What service do you need today?</Text>
@@ -442,18 +599,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Popular Services</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.popularScroll}>
-            {popularServices.map((service, index) => (
-              <TouchableOpacity 
-                key={index} 
-                style={styles.popularCard}
-                onPress={() => handleCategoryPress(service.category)}
-              >
-                <View style={[styles.popularIcon, { backgroundColor: `${service.icon === Droplets ? '#3b82f6' : service.icon === Sparkles ? '#10b981' : service.icon === Zap ? '#f59e0b' : '#ef4444'}20` }]}>
-                  <service.icon size={24} color={service.icon === Droplets ? '#3b82f6' : service.icon === Sparkles ? '#10b981' : service.icon === Zap ? '#f59e0b' : '#ef4444'} />
-                </View>
-                <Text style={styles.popularText}>{service.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {popularServices.map((service, index) => {
+              const colors = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'];
+              const color = colors[index % colors.length];
+              const IconComponent = service.icon;
+              
+              return (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.popularCard}
+                  onPress={() => handleCategoryPress(service.category)}
+                >
+                  <View style={[styles.popularIcon, { backgroundColor: `${color}20` }]}>
+                    <IconComponent size={24} color={color} />
+                  </View>
+                  <Text style={styles.popularText}>{service.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -469,7 +632,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                 activeOpacity={0.8}
               >
                 <View style={[styles.categoryIcon, { backgroundColor: `${category.color}20` }]}>
-                  <category.icon size={28} color={category.color} />
+                  {category.iconImage ? (
+                    <Image source={category.iconImage} style={styles.categoryIconImage} resizeMode="contain" />
+                  ) : (
+                    <category.icon size={28} color={category.color} />
+                  )}
                 </View>
                 <Text style={styles.categoryName}>{category.name}</Text>
                 <Text style={styles.categoryDescription}>{category.description}</Text>
@@ -594,9 +761,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
           )}
         </View>
       </ScrollView>
-
-      {/* Bottom Navigation */}
-      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </SafeAreaView>
   );
 };
@@ -673,6 +837,36 @@ const styles = StyleSheet.create({
   },
   refreshingIcon: {
     transform: [{ rotate: '180deg' }],
+  },
+  notificationButton: {
+    position: 'relative',
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#fdf2f8',
+    borderWidth: 1,
+    borderColor: '#fce7f3',
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  badgeEmpty: {
+    backgroundColor: '#94a3b8',
   },
   greeting: {
     fontSize: 16,
@@ -807,6 +1001,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  categoryIconImage: {
+    width: 40,
+    height: 40,
   },
   categoryName: {
     fontSize: 16,

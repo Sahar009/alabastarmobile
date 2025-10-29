@@ -34,7 +34,9 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>We need your location to find nearby service providers</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need your location to find nearby service providers</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

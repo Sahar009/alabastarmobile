@@ -40,8 +40,9 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
         : await apiService.login(loginData);
       
       if (response.success && response.data) {
-        // Store token for future API calls
-        apiService.setToken(response.data.token);
+        // Store token and user data in AsyncStorage for future API calls
+        await apiService.setToken(response.data.token);
+        await apiService.setUser(response.data.user);
         
         // Skip OTP verification and go directly to success
         onAuthSuccess(response.data);
@@ -68,8 +69,9 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
       const response = await apiService.register(registerData);
       
       if (response.success && response.data) {
-        // Store token for future API calls
-        apiService.setToken(response.data.token);
+        // Store token and user data in AsyncStorage for future API calls
+        await apiService.setToken(response.data.token);
+        await apiService.setUser(response.data.user);
         
         // Skip OTP verification and go directly to success
         onAuthSuccess(response.data);

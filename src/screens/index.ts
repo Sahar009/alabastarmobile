@@ -13,3 +13,7 @@ export { default as SplashScreen } from './SplashScreen';
 export { default as HomeScreen } from './HomeScreen';
 export { default as LocationSelectionScreen } from './LocationSelectionScreen';
 export { default as ProfileScreen } from './ProfileScreen';
+export { default as NotificationsScreen } from './NotificationsScreen';
+export { default as BookingsScreen } from './BookingsScreen';
+export { default as RatingScreen } from './RatingScreen';
+export { default as MessagingScreen } from './MessagingScreen';
