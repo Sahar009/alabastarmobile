@@ -21,6 +21,8 @@ interface SignUpScreenProps {
   onSignUp: (userData: SignUpData) => Promise<void>;
   onLogin: () => void;
   onBackToUserTypeSelection: () => void;
+  onGoogleSignUp: () => void;
+  isGoogleLoading?: boolean;
 }
 
 interface SignUpData {
@@ -31,7 +33,13 @@ interface SignUpData {
   phone: string;
 }
 
-const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onLogin, onBackToUserTypeSelection }) => {
+const SignUpScreen: React.FC<SignUpScreenProps> = ({
+  onSignUp,
+  onLogin,
+  onBackToUserTypeSelection,
+  onGoogleSignUp,
+  isGoogleLoading = false,
+}) => {
   const [formData, setFormData] = useState<SignUpData>({
     fullName: '',
     email: '',
@@ -274,9 +282,16 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onLogin, onBackTo
             </View>
 
             {/* Google Sign Up */}
-            <TouchableOpacity style={styles.googleButton}>
+            <TouchableOpacity
+              style={[styles.googleButton, isGoogleLoading && styles.googleButtonDisabled]}
+              onPress={onGoogleSignUp}
+              activeOpacity={0.8}
+              disabled={isGoogleLoading}
+            >
               <GoogleIcon size={20} />
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <Text style={styles.googleButtonText}>
+                {isGoogleLoading ? 'Connecting…' : 'Continue with Google'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -518,6 +533,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     marginBottom: 20,
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   googleButtonText: {
     fontSize: 16,

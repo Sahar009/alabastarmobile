@@ -8,6 +8,7 @@ export { default as LoginScreen } from './LoginScreen';
 export { default as SignUpScreen } from './SignUpScreen';
 export { default as ForgotPasswordScreen } from './ForgotPasswordScreen';
 export { default as OTPVerificationScreen } from './OTPVerificationScreen';
+export { default as ProviderAuthScreen } from './ProviderAuthScreen';
 export { default as ProvidersScreen } from './ProvidersScreen';
 export { default as SplashScreen } from './SplashScreen';
 export { default as HomeScreen } from './HomeScreen';

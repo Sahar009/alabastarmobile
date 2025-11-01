@@ -22,13 +22,17 @@ interface LoginScreenProps {
   onSignUp: () => void;
   onForgotPassword: () => void;
   onBackToUserTypeSelection: () => void;
+  onGoogleSignIn: () => void;
+  isGoogleLoading?: boolean;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ 
   onLogin, 
   onSignUp, 
   onForgotPassword,
-  onBackToUserTypeSelection
+  onBackToUserTypeSelection,
+  onGoogleSignIn,
+  isGoogleLoading = false,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -167,9 +171,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             </View>
 
             {/* Google Sign In */}
-            <TouchableOpacity style={styles.googleButton}>
+            <TouchableOpacity
+              style={[styles.googleButton, isGoogleLoading && styles.googleButtonDisabled]}
+              onPress={onGoogleSignIn}
+              activeOpacity={0.8}
+              disabled={isGoogleLoading}
+            >
               <GoogleIcon size={20} />
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <Text style={styles.googleButtonText}>
+                {isGoogleLoading ? 'Connecting…' : 'Continue with Google'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -380,6 +391,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
     marginBottom: 20,
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   googleButtonText: {
     fontSize: 16,

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Calendar, Briefcase, Upload, Wallet } from 'lucide-react-native';
@@ -61,7 +62,11 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>ALABASTAR</Text>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>Welcome to Alabastar</Text>
           <Text style={styles.subtitle}>
@@ -279,12 +284,12 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     marginBottom: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ec4899',
-    letterSpacing: 2,
+  logoImage: {
+    width: 200,
+    height: 80,
   },
   title: {
     fontSize: 24,

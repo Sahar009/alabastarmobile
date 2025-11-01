@@ -12,19 +12,17 @@ import {
 } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from './src/services/api';
-import { 
-  OnboardingNavigator, 
-  UserTypeSelectionScreen, 
-  AuthNavigator, 
-  ProvidersScreen, 
-  SplashScreen,
-  HomeScreen,
-  LocationSelectionScreen,
-  ProfileScreen,
-  NotificationsScreen,
-  BookingsScreen,
-  MessagingScreen
-} from './src/screens';
+import SplashScreen from './src/screens/SplashScreen';
+import OnboardingNavigator from './src/screens/OnboardingNavigator';
+import UserTypeSelectionScreen from './src/screens/UserTypeSelectionScreen';
+import AuthNavigator from './src/screens/AuthNavigator';
+import ProvidersScreen from './src/screens/ProvidersScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import LocationSelectionScreen from './src/screens/LocationSelectionScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import BookingsScreen from './src/screens/BookingsScreen';
+import MessagingScreen from './src/screens/MessagingScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 
 type AppScreen = 'onboarding' | 'user-type-selection' | 'auth' | 'home' | 'location-selection' | 'providers' | 'profile' | 'notifications' | 'bookings' | 'messages';
@@ -39,11 +37,29 @@ function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     checkFirstLaunch();
     checkAuthState();
+    // Load saved location from AsyncStorage
+    loadSavedLocation();
   }, []);
+
+  const loadSavedLocation = async () => {
+    try {
+      const savedLocation = await AsyncStorage.getItem('selectedLocation');
+      if (savedLocation) {
+        setSelectedLocation(savedLocation);
+      } else {
+        // Default to Lagos if no location saved
+        setSelectedLocation('Lagos');
+      }
+    } catch (error) {
+      console.error('Error loading saved location:', error);
+      setSelectedLocation('Lagos');
+    }
+  };
 
   const checkAuthState = async () => {
     try {
@@ -130,13 +146,69 @@ function App() {
     setSelectedLocation('');
   };
 
-  const handleSelectCategory = (category: string) => {
-    setSelectedCategory(category);
-    setCurrentScreen('location-selection');
+  const handleSelectCategory = (category: string, search?: string) => {
+    if (category === 'search' && search) {
+      // If it's a search, go directly to providers with search query
+      setSearchQuery(search);
+      setSelectedCategory('');
+      setCurrentScreen('providers');
+    } else {
+      // Normal category selection goes through location selection
+      setSelectedCategory(category);
+      setSearchQuery(''); // Clear search when selecting category
+      setCurrentScreen('location-selection');
+    }
   };
 
-  const handleLocationSelected = (location: string) => {
-    setSelectedLocation(location);
+  const handleLocationSelected = async (location: string | any) => {
+    // Handle both string and LocationData types
+    let locationString: string = 'Lagos'; // Default value
+    
+    if (typeof location === 'string') {
+      locationString = location;
+    } else if (location && location.city) {
+      // Use city directly if available
+      locationString = location.city;
+    } else if (location && location.locality) {
+      // Use locality if city not available
+      locationString = location.locality;
+    } else if (location && location.district) {
+      // Use district if locality not available
+      locationString = location.district;
+    } else if (location && location.address) {
+      // Extract city from full address if available
+      const addressParts = location.address.split(',');
+      // Try to find city in address (usually second or third part)
+      if (addressParts.length > 1) {
+        // Look for city-like parts (not street number/name, not state/country)
+        for (let i = 1; i < Math.min(4, addressParts.length); i++) {
+          const part = addressParts[i].trim();
+          if (part && part.length > 2 && !part.toLowerCase().includes('nigeria') && !part.toLowerCase().includes('state')) {
+            locationString = part;
+            break;
+          }
+        }
+      }
+      // If still default, try first part of address
+      if (locationString === 'Lagos' && addressParts.length > 0) {
+        locationString = addressParts[0].trim() || 'Lagos';
+      }
+    }
+    
+    console.log('Location selected:', location, 'Extracted location string:', locationString);
+    setSelectedLocation(locationString);
+    
+    // Save location to AsyncStorage for persistence
+    try {
+      await AsyncStorage.setItem('selectedLocation', locationString);
+      if (location && typeof location === 'object') {
+        // Also save full location data if available
+        await AsyncStorage.setItem('locationData', JSON.stringify(location));
+      }
+    } catch (error) {
+      console.error('Error saving location:', error);
+    }
+    
     setCurrentScreen('providers');
   };
 
@@ -223,6 +295,7 @@ function App() {
             onBack={handleBackToLocationSelection}
             selectedCategory={selectedCategory}
             selectedLocation={selectedLocation}
+            searchQuery={searchQuery}
           />
         );
       

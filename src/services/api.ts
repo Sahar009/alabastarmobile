@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = 'http://localhost:8000/api'; // Update this to your backend URL
+export const API_BASE_URL = 'http://localhost:8000/api'; // Update this to your backend URL
 
 // API Response Interface
 interface ApiResponse<T = any> {

@@ -6,14 +6,13 @@ import {
   TouchableOpacity,
   Dimensions,
   TextInput,
-  ActivityIndicator,
   ScrollView,
   Platform,
   PermissionsAndroid,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MapPin, Search, ArrowLeft, Navigation } from 'lucide-react-native';
+import { MapPin, Search, ArrowLeft } from 'lucide-react-native';
 import Geolocation from '@react-native-community/geolocation';
 
 const { height, width } = Dimensions.get('window');
@@ -44,7 +43,9 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
   selectedCategory 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDetecting, setIsDetecting] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [remoteSuggestions, setRemoteSuggestions] = useState<Array<{ label: string; city?: string; state?: string; lat?: number; lon?: number }>>([]);
+  const [_isDetecting, setIsDetecting] = useState(false);
   const [detectedLocation, setDetectedLocation] = useState<string | null>(null);
   const [locationData, setLocationData] = useState<LocationData | null>(null);
 
@@ -56,9 +57,48 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
     'Omole', 'Isolo', 'Festac', 'Ijegun', 'Isheri', 'Alimosho'
   ];
 
-  const filteredLocations = lagosAreas.filter(area =>
-    area.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredLocations = lagosAreas
+    .filter(area => area.toLowerCase().includes(searchQuery.toLowerCase()))
+    .slice(0, 8);
+
+  // Debounced remote suggestions using OpenStreetMap Nominatim (no API key)
+  useEffect(() => {
+    const controller = new AbortController();
+    const q = searchQuery.trim();
+    if (!q) {
+      setRemoteSuggestions([]);
+      return () => controller.abort();
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=ng&q=${encodeURIComponent(q)}&limit=8`;
+        const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+        const data: any[] = await res.json();
+        const mapped = data.map((item) => {
+          const address = item.address || {};
+          const city = address.city || address.town || address.village || address.suburb || address.state_district || '';
+          const state = address.state || '';
+          return {
+            label: item.display_name as string,
+            city,
+            state,
+            lat: item.lat ? parseFloat(item.lat) : undefined,
+            lon: item.lon ? parseFloat(item.lon) : undefined,
+          };
+        });
+        setRemoteSuggestions(mapped);
+      } catch {
+        // Network issues; keep local fallback
+        setRemoteSuggestions([]);
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
 
   // Auto-detect location on mount
   useEffect(() => {
@@ -216,15 +256,19 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
   };
 
 
-  const handleConfirmDetected = () => {
+  // Kept for parity with previous flow; will be used when auto-detect UI returns
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _handleConfirmDetected = () => {
     if (locationData) {
-      onLocationSelect(locationData);
+      const locationString = locationData.district || locationData.locality || locationData.city || detectedLocation || 'Lagos';
+      onLocationSelect(locationString);
     } else if (detectedLocation) {
       onLocationSelect(detectedLocation);
     }
   };
 
   const handleSearchSelect = (location: string) => {
+    // When user manually selects from the list, pass as string
     onLocationSelect(location);
   };
 
@@ -248,6 +292,23 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
       cooking: 'Cooking',
     };
     return categoryNames[categoryId] || 'Service';
+  };
+
+  // Renders location text with the typed part highlighted
+  const highlightMatch = (text: string, query: string) => {
+    if (!query) return <Text style={styles.suggestionText}>{text}</Text>;
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return <Text style={styles.suggestionText}>{text}</Text>;
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return (
+      <Text style={styles.suggestionText}>
+        {before}
+        <Text style={styles.matchHighlight}>{match}</Text>
+        {after}
+      </Text>
+    );
   };
 
   return (
@@ -277,45 +338,7 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
         showsVerticalScrollIndicator={false}
       >
         {/* Auto-detect Section */}
-        {!searchQuery && (
-          <View style={styles.autoDetectSection}>
-            {isDetecting ? (
-              <View style={styles.detectingContainer}>
-                <ActivityIndicator size="large" color="#ec4899" />
-                <Text style={styles.detectingText}>Detecting your location...</Text>
-              </View>
-            ) : detectedLocation ? (
-              <View style={styles.detectedLocationCard}>
-                <View style={styles.detectedLocationIcon}>
-                  <Navigation size={28} color="#ec4899" />
-                </View>
-                <View style={styles.detectedLocationInfo}>
-                  <Text style={styles.detectedLabel}>📍 Your Current Location</Text>
-                  <Text style={styles.detectedLocation}>{locationData?.address || `${detectedLocation}, Lagos`}</Text>
-                  {locationData?.district && locationData.district !== locationData.city && (
-                    <Text style={styles.detectedSubtext}>{locationData.district}</Text>
-                  )}
-                </View>
-                <TouchableOpacity 
-                  style={styles.useLocationButton}
-                  onPress={handleConfirmDetected}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.useLocationButtonText}>Use This</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity 
-                style={styles.detectButton}
-                onPress={detectLocation}
-                activeOpacity={0.8}
-              >
-                <Navigation size={20} color="#ec4899" />
-                <Text style={styles.detectButtonText}>Auto-detect My Location</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+    
 
         {/* Search Section */}
         <View style={styles.searchSection}>
@@ -331,14 +354,42 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
                 style={styles.searchInput}
                 placeholder="Search areas in Lagos..."
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(t) => { setSearchQuery(t); setShowSuggestions(!!t); }}
+                onFocus={() => setShowSuggestions(!!searchQuery)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
                 placeholderTextColor="#9ca3af"
+                returnKeyType="search"
               />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => { setSearchQuery(''); setShowSuggestions(false); }}>
+                  <Text style={styles.clearText}>Clear</Text>
+                </TouchableOpacity>
+              )}
             </View>
+
+            {showSuggestions && (remoteSuggestions.length > 0 || filteredLocations.length > 0) && (
+              <View style={styles.suggestionsCard}>
+                {(remoteSuggestions.length > 0 ? remoteSuggestions.map(s => s.label) : filteredLocations).map((location) => (
+                  <TouchableOpacity
+                    key={location}
+                    style={styles.suggestionItem}
+                    onPress={() => handleSearchSelect(location)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.suggestionIcon}>
+                      <MapPin size={16} color="#ec4899" />
+                    </View>
+                    <Text style={styles.suggestionText}>
+                      {highlightMatch(location, searchQuery)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Search Results */}
-          {filteredLocations.length > 0 ? (
+          {!showSuggestions && filteredLocations.length > 0 ? (
             <View style={styles.locationsList}>
               {filteredLocations.map((location) => (
                 <TouchableOpacity
@@ -352,7 +403,7 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
                 </TouchableOpacity>
               ))}
             </View>
-          ) : searchQuery ? (
+          ) : !showSuggestions && searchQuery ? (
             <View style={styles.noResults}>
               <Text style={styles.noResultsText}>No areas found</Text>
             </View>
@@ -565,6 +616,7 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     marginBottom: 30,
+    position: 'relative',
   },
   searchBar: {
     flexDirection: 'row',
@@ -580,6 +632,51 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+  },
+  clearText: {
+    color: '#ec4899',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  suggestionsCard: {
+    position: 'absolute',
+    top: 58,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    paddingVertical: 6,
+    zIndex: 10,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  suggestionIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#fdf2f8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  suggestionText: {
+    fontSize: 15,
+    color: '#0f172a',
+  },
+  matchHighlight: {
+    color: '#ec4899',
+    fontWeight: '700',
   },
   searchInput: {
     flex: 1,

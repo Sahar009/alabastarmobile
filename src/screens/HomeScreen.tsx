@@ -8,6 +8,8 @@ import {
   Dimensions,
   Image,
   RefreshControl,
+  TextInput,
+  FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,7 +42,7 @@ import {
 const { height, width } = Dimensions.get('window');
 
 interface HomeScreenProps {
-  onCategorySelect: (category: string) => void;
+  onCategorySelect: (category: string, search?: string) => void;
   userData: any;
   selectedLocation?: string;
   onNavigate?: (screen: string) => void;
@@ -60,7 +62,10 @@ interface FeaturedService {
 }
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, selectedLocation = 'Lagos', onNavigate }) => {
-  const [_searchQuery, _setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string}>>([]);
+  const [allCategories, setAllCategories] = useState<Array<{id: string; name: string; subcategories?: string[]}>>([]);
   const [featuredServices, setFeaturedServices] = useState<FeaturedService[]>([]);
   const [isLoadingFeatured, setIsLoadingFeatured] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -407,9 +412,17 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
             iconImage: iconImage,
             color: colors[index % colors.length],
             image: '/images/' + cat.slug + '2d.png',
-            description: cat.description || 'Service category'
+            description: cat.description || 'Service category',
+            subcategories: cat.subcategories || []
           };
         });
+        
+        // Store all categories for search suggestions
+        setAllCategories(apiCategories.map((cat: any) => ({
+          id: cat.id,
+          name: cat.name,
+          subcategories: cat.subcategories || []
+        })));
         
         // Set popular services from first 4 categories
         const popular = apiCategories.slice(0, 4).map((cat: any) => ({
@@ -425,8 +438,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         // Fallback to hardcoded categories with iconImage
         const categoriesWithImages = hardcodedCategories.map((cat: any) => ({
           ...cat,
-          iconImage: categoryImages[cat.id]
+          iconImage: categoryImages[cat.id],
+          subcategories: []
         }));
+        
+        // Store all categories for search suggestions
+        setAllCategories(categoriesWithImages.map((cat: any) => ({
+          id: cat.id,
+          name: cat.name,
+          subcategories: []
+        })));
         
         // Set popular services from first 4 fallback categories
         const popular = categoriesWithImages.slice(0, 4).map((cat: any) => ({
@@ -443,8 +464,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       // Fallback to hardcoded categories with iconImage
       const categoriesWithImages = hardcodedCategories.map((cat: any) => ({
         ...cat,
-        iconImage: categoryImages[cat.id]
+        iconImage: categoryImages[cat.id],
+        subcategories: []
       }));
+      
+      // Store all categories for search suggestions
+      setAllCategories(categoriesWithImages.map((cat: any) => ({
+        id: cat.id,
+        name: cat.name,
+        subcategories: []
+      })));
       
       // Set popular services from first 4 fallback categories
       const popular = categoriesWithImages.slice(0, 4).map((cat: any) => ({
@@ -457,6 +486,71 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       setCategories(categoriesWithImages.slice(0, 14));
     }
   }, [categoryIcons, categoryImages, hardcodedCategories]);
+  
+  // Generate search suggestions based on query
+  const generateSuggestions = useCallback((query: string) => {
+    if (!query || query.trim().length === 0) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const queryLower = query.toLowerCase().trim();
+    const suggestionsList: Array<{id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string}> = [];
+
+    // Search in categories
+    allCategories.forEach(category => {
+      // Match category name (prioritize exact matches)
+      const categoryNameLower = category.name.toLowerCase();
+      if (categoryNameLower.includes(queryLower)) {
+        const isExactMatch = categoryNameLower === queryLower || categoryNameLower.startsWith(queryLower);
+        suggestionsList.push({
+          id: category.id,
+          name: category.name,
+          type: 'category',
+          // Add priority for sorting (exact matches first)
+          priority: isExactMatch ? 1 : 2
+        } as any);
+      }
+
+      // Search in subcategories
+      if (category.subcategories && category.subcategories.length > 0) {
+        category.subcategories.forEach(subcategory => {
+          const subcategoryLower = subcategory.toLowerCase();
+          if (subcategoryLower.includes(queryLower)) {
+            const isExactMatch = subcategoryLower === queryLower || subcategoryLower.startsWith(queryLower);
+            suggestionsList.push({
+              id: `${category.id}_${subcategory}`,
+              name: subcategory,
+              type: 'subcategory',
+              categoryId: category.id,
+              priority: isExactMatch ? 1 : 2
+            } as any);
+          }
+        });
+      }
+    });
+
+    // Sort by priority (exact matches first), then limit to top 8
+    const sortedSuggestions = suggestionsList.sort((a: any, b: any) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return a.name.localeCompare(b.name);
+    });
+
+    setSuggestions(sortedSuggestions.slice(0, 8));
+    setShowSuggestions(sortedSuggestions.length > 0 && query.length > 0);
+  }, [allCategories]);
+
+  // Handle search query change with debouncing
+  useEffect(() => {
+    if (searchQuery && searchQuery.trim().length > 0) {
+      // Show suggestions immediately as user types
+      generateSuggestions(searchQuery);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [searchQuery, generateSuggestions]);
   
   useEffect(() => {
     fetchCategories();
@@ -521,7 +615,53 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
   };
 
   const handleSearchPress = () => {
-    onCategorySelect('search');
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
+      // Navigate to providers screen with search query
+      onCategorySelect('search', trimmedQuery);
+      setSearchQuery('');
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: {id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string}) => {
+    setShowSuggestions(false);
+    
+    if (suggestion.type === 'category') {
+      setSearchQuery('');
+      onCategorySelect(suggestion.id);
+    } else if (suggestion.type === 'subcategory' && suggestion.categoryId) {
+      // Navigate to the parent category when subcategory is selected
+      setSearchQuery('');
+      onCategorySelect(suggestion.categoryId);
+    } else {
+      // If it's a subcategory, use the suggestion name as search query
+      const searchText = suggestion.name;
+      onCategorySelect('search', searchText);
+      setSearchQuery('');
+    }
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+  };
+
+  const handleSearchFocus = () => {
+    // Show suggestions if there are any and query exists
+    if (searchQuery && searchQuery.trim().length > 0) {
+      // Trigger suggestions generation if needed
+      if (suggestions.length === 0 && allCategories.length > 0) {
+        generateSuggestions(searchQuery);
+      }
+      setShowSuggestions(suggestions.length > 0);
+    }
+  };
+
+  const handleSearchBlur = () => {
+    // Delay hiding suggestions to allow for suggestion clicks
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
   };
 
   return (
@@ -555,10 +695,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
               <Text style={styles.userName}>{userData?.user?.fullName || 'User'}!</Text>
             </View>
             <View style={styles.headerRight}>
-              <View style={styles.locationContainer}>
-                <MapPin size={16} color="#ec4899" />
-                <Text style={styles.locationText}>{selectedLocation}, Nigeria</Text>
-              </View>
               <TouchableOpacity 
                 style={[styles.refreshButton, refreshing && styles.refreshButtonActive]} 
                 onPress={onRefresh}
@@ -581,14 +717,50 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.subtitle}>What service do you need today?</Text>
+          <Text style={styles.subtitle}>Find trusted pros for any job</Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#94a3b8" />
-            <Text style={styles.searchPlaceholder}>Search for services...</Text>
+          <View style={styles.searchBarContainer}>
+            <View style={styles.searchBar}>
+              <Search size={20} color="#94a3b8" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search for services..."
+                placeholderTextColor="#9ca3af"
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
+                returnKeyType="search"
+                onSubmitEditing={handleSearchPress}
+              />
+            </View>
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <FlatList
+                  data={suggestions}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.suggestionItem}
+                      onPress={() => handleSuggestionSelect(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Search size={16} color="#64748b" />
+                      <View style={styles.suggestionContent}>
+                        <Text style={styles.suggestionText}>{item.name}</Text>
+                        <Text style={styles.suggestionType}>
+                          {item.type === 'category' ? 'Category' : 'Service'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                  scrollEnabled={false}
+                />
+              </View>
+            )}
           </View>
           <TouchableOpacity style={styles.searchButton} onPress={handleSearchPress}>
             <Search size={20} color="#ffffff" />
@@ -647,7 +819,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
 
         {/* Featured Services */}
         <View style={styles.featuredSection}>
-          <Text style={styles.sectionTitle}>Featured Services in {selectedLocation}</Text>
+          <Text style={styles.sectionTitle}>Featured Services</Text>
           {isLoadingFeatured ? (
             <View style={styles.loadingContainer}>
               <Text style={styles.loadingText}>Loading featured services...</Text>
@@ -812,6 +984,16 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 30,
+    padding: 16,
+    backgroundColor: '#ffffffcc',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f3e8ff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   headerTop: {
     flexDirection: 'row',
@@ -869,35 +1051,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#94a3b8',
   },
   greeting: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#0f172a',
   },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fdf2f8',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ec4899',
-  },
-  locationText: {
-    fontSize: 14,
-    color: '#ec4899',
-    fontWeight: '600',
-    marginLeft: 4,
-  },
+  
   subtitle: {
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
+    fontSize: 15,
+    color: '#475569',
+    fontWeight: '600',
+    marginTop: 6,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -921,10 +1090,54 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  searchPlaceholder: {
+  searchBarContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  searchInput: {
+    flex: 1,
     fontSize: 16,
-    color: '#9ca3af',
+    color: '#0f172a',
     marginLeft: 8,
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginTop: 4,
+    maxHeight: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    zIndex: 1000,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  suggestionContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  suggestionText: {
+    fontSize: 15,
+    color: '#0f172a',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  suggestionType: {
+    fontSize: 12,
+    color: '#64748b',
   },
   searchButton: {
     backgroundColor: '#ec4899',

@@ -25,6 +25,7 @@ export interface Provider {
   estimatedArrival: string;
   yearsOfExperience: number;
   brandImages: any[];
+  portfolio?: string[];
   isTopListed: boolean;
   distance?: number;
   latitude?: number;
@@ -64,6 +65,23 @@ class ProviderService {
    * Normalize provider data from API
    */
   private normalizeProviderData(provider: any): Provider {
+    // Normalize subcategories - handle null, string, or array
+    let subcategories: string[] = [];
+    if (provider.subcategories) {
+      if (Array.isArray(provider.subcategories)) {
+        subcategories = provider.subcategories;
+      } else if (typeof provider.subcategories === 'string') {
+        try {
+          // Try to parse as JSON first
+          const parsed = JSON.parse(provider.subcategories);
+          subcategories = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          // If JSON parse fails, treat it as a single subcategory
+          subcategories = [provider.subcategories];
+        }
+      }
+    }
+    
     return {
       id: provider.id,
       user: {
@@ -74,7 +92,7 @@ class ProviderService {
       },
       businessName: provider.businessName || 'Business',
       category: provider.category || '',
-      subcategories: provider.subcategories || [],
+      subcategories: subcategories,
       locationCity: provider.locationCity || '',
       locationState: provider.locationState || '',
       ratingAverage: provider.ratingAverage || 0,
@@ -86,7 +104,8 @@ class ProviderService {
       isAvailable: provider.isAvailable !== false,
       estimatedArrival: provider.estimatedArrival || '30 mins',
       yearsOfExperience: provider.yearsOfExperience || 0,
-      brandImages: provider.brandImages || provider.portfolio || [],
+      brandImages: provider.brandImages || [],
+      portfolio: provider.portfolio || [],
       isTopListed: provider.isTopListed || false,
       distance: provider.distance,
       latitude: provider.latitude,
@@ -223,7 +242,7 @@ class ProviderService {
         const matchesSearch = 
           provider.businessName.toLowerCase().includes(searchLower) ||
           provider.user.fullName.toLowerCase().includes(searchLower) ||
-          provider.subcategories.some(sub => sub.toLowerCase().includes(searchLower)) ||
+          (Array.isArray(provider.subcategories) && provider.subcategories.some(sub => sub.toLowerCase().includes(searchLower))) ||
           provider.bio.toLowerCase().includes(searchLower);
         
         if (!matchesSearch) return false;

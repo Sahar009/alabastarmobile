@@ -28,6 +28,8 @@ import {
   RefreshCw
 } from 'lucide-react-native';
 import { providerService, type Provider as ProviderType, type ProviderFilters } from '../services/providerService';
+import ProviderProfileModal from '../components/ProviderProfileModal';
+import BookingModal from '../components/BookingModal';
 
 const { height } = Dimensions.get('window');
 
@@ -37,6 +39,7 @@ interface ProvidersScreenProps {
   onBack: () => void;
   selectedCategory: string;
   selectedLocation: string;
+  searchQuery?: string;
 }
 
 // Using Provider type from providerService
@@ -47,20 +50,32 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   onLogout, 
   onBack, 
   selectedCategory, 
-  selectedLocation 
+  selectedLocation,
+  searchQuery: initialSearchQuery = ''
 }) => {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Update search query when prop changes
+  useEffect(() => {
+    if (initialSearchQuery) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
   const [_showSort, _setShowSort] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [priceFilter, setPriceFilter] = useState<{ min: number; max: number }>({ min: 0, max: 50000 });
   const [availabilityFilter, setAvailabilityFilter] = useState(false);
   const [sortBy, setSortBy] = useState<'price' | 'rating' | 'distance' | 'reviews'>('rating');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [bookingProvider, setBookingProvider] = useState<Provider | null>(null);
 
   const categoryIcons: { [key: string]: any } = {
     plumbing: Wrench,
@@ -155,6 +170,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
     try {
       const filters: ProviderFilters = {
         location: selectedLocation,
+        search: searchQuery || undefined, // Include search query if available
       };
 
       let data;
@@ -177,7 +193,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory, selectedLocation, getMockProviders]);
+  }, [selectedCategory, selectedLocation, searchQuery, getMockProviders]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -228,15 +244,15 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   };
 
 
+  const handleProviderPress = (provider: Provider) => {
+    setSelectedProvider(provider);
+    setShowProfileModal(true);
+  };
+
   const handleBookProvider = (provider: Provider) => {
-    Alert.alert(
-      'Book Service',
-      `Book ${provider.businessName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Book Now', onPress: () => console.log('Booking:', provider.id) }
-      ]
-    );
+    setShowProfileModal(false);
+    setBookingProvider(provider);
+    setShowBookingModal(true);
   };
 
   return (
@@ -255,7 +271,11 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
-            {selectedCategory ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Providers` : 'All Providers'}
+            {searchQuery 
+              ? `Search: "${searchQuery}"` 
+              : selectedCategory 
+                ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Providers` 
+                : 'All Providers'}
           </Text>
           <Text style={styles.headerSubtitle}>
             {selectedLocation} • {filteredProviders.length} providers
@@ -303,10 +323,11 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
               <Search size={20} color="#94a3b8" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search providers..."
+                placeholder={initialSearchQuery ? `Searching: ${initialSearchQuery}...` : "Search providers..."}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholderTextColor="#9ca3af"
+                returnKeyType="search"
               />
             </View>
           </View>
@@ -383,19 +404,44 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                     key={provider.id} 
                     style={styles.providerCard} 
                     activeOpacity={0.8}
-                    onPress={() => handleBookProvider(provider)}
+                    onPress={() => handleProviderPress(provider)}
                   >
                     <View style={styles.providerInfo}>
                       <View style={styles.providerIconContainer}>
-                        {provider.brandImages && provider.brandImages.length > 0 ? (
-                          <Image
-                            source={{ uri: provider.brandImages[0].url || provider.brandImages[0] }}
-                            style={styles.providerAvatarImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <CategoryIcon size={32} color="#ec4899" />
-                        )}
+                        {(() => {
+                          // Priority 1: User avatarUrl
+                          if (provider.user?.avatarUrl) {
+                            return (
+                              <Image
+                                source={{ uri: provider.user.avatarUrl }}
+                                style={styles.providerAvatarImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          }
+                          // Priority 2: First brandImage
+                          if (provider.brandImages && provider.brandImages.length > 0) {
+                            return (
+                              <Image
+                                source={{ uri: provider.brandImages[0].url || provider.brandImages[0] }}
+                                style={styles.providerAvatarImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          }
+                          // Priority 3: First portfolio image
+                          if (provider.portfolio && provider.portfolio.length > 0) {
+                            return (
+                              <Image
+                                source={{ uri: provider.portfolio[0] }}
+                                style={styles.providerAvatarImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          }
+                          // Fallback: Category icon
+                          return <CategoryIcon size={32} color="#ec4899" />;
+                        })()}
                       </View>
                       <View style={styles.providerDetails}>
                         <Text style={styles.providerName}>{provider.businessName}</Text>
@@ -417,46 +463,67 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                         )}
                       </View>
                     </View>
+
+                    {/* Featured Badge */}
+                    {provider.isTopListed && (
+                      <View style={styles.featuredBadge}>
+                        <View style={styles.featuredBadgeContent}>
+                          <Zap size={14} color="#ffffff" fill="#ffffff" />
+                          <Text style={styles.featuredBadgeText}>FEATURED</Text>
+                        </View>
+                      </View>
+                    )}
+
                     <View style={styles.providerBrandImages}>
-                      {/* Brand Images - Show remaining images (skip first one as it's used as avatar) */}
-                      {provider.brandImages && provider.brandImages.length > 1 ? (
-                        <View style={styles.brandImageGrid}>
-                          {provider.brandImages.slice(1, 4).map((image: any, index: number) => (
-                            <View key={index} style={styles.brandImageContainer}>
-                              <Image
-                                source={{ uri: image.url || image }}
-                                style={styles.brandImage}
-                                resizeMode="cover"
-                              />
-                            </View>
-                          ))}
-                          {provider.brandImages.length > 4 && (
-                            <View style={styles.moreImagesContainer}>
-                              <Text style={styles.moreImagesText}>+{provider.brandImages.length - 4}</Text>
-                            </View>
-                          )}
-                        </View>
-                      ) : provider.brandImages && provider.brandImages.length === 1 ? (
-                        <View style={styles.brandImageGrid}>
-                          <View style={styles.brandImagePlaceholder}>
-                            <CategoryIcon size={16} color="#9ca3af" />
+                      {/* Brand Images - Combine brandImages and portfolio */}
+                      {(() => {
+                        // Collect all available images
+                        let allImages: string[] = [];
+                        
+                        // Add brand images
+                        if (provider.brandImages && provider.brandImages.length > 0) {
+                          allImages = provider.brandImages.map((img: any) => img.url || img);
+                        }
+                        
+                        // Add portfolio images if we have less than 3
+                        if (allImages.length < 3 && provider.portfolio && provider.portfolio.length > 0) {
+                          allImages = [...allImages, ...provider.portfolio];
+                        }
+                        
+                        // Remove duplicates and take first 3
+                        allImages = Array.from(new Set(allImages)).slice(0, 3);
+                        
+                        return (
+                          <View style={styles.brandImageGrid}>
+                            {allImages.length > 0 ? (
+                              <>
+                                {allImages.map((image, index) => (
+                                  <View key={index} style={styles.brandImageContainer}>
+                                    <Image
+                                      source={{ uri: image }}
+                                      style={styles.brandImage}
+                                      resizeMode="cover"
+                                    />
+                                  </View>
+                                ))}
+                                {/* Fill remaining slots with placeholders */}
+                                {Array.from({ length: 3 - allImages.length }).map((_, i) => (
+                                  <View key={`placeholder-${i}`} style={styles.brandImagePlaceholder}>
+                                    <CategoryIcon size={20} color="#94a3b8" />
+                                  </View>
+                                ))}
+                              </>
+                            ) : (
+                              // No images available - show placeholders
+                              [1, 2, 3].map((i) => (
+                                <View key={i} style={styles.brandImagePlaceholder}>
+                                  <CategoryIcon size={20} color="#94a3b8" />
+                                </View>
+                              ))
+                            )}
                           </View>
-                          <View style={styles.brandImagePlaceholder}>
-                            <CategoryIcon size={16} color="#9ca3af" />
-                          </View>
-                          <View style={styles.brandImagePlaceholder}>
-                            <CategoryIcon size={16} color="#9ca3af" />
-                          </View>
-                        </View>
-                      ) : (
-                        <View style={styles.brandImageGrid}>
-                          {[1, 2, 3].map((i) => (
-                            <View key={i} style={styles.brandImagePlaceholder}>
-                              <CategoryIcon size={20} color="#94a3b8" />
-                            </View>
-                          ))}
-                        </View>
-                      )}
+                        );
+                      })()}
                       
                       {/* Availability Badge */}
                       <View style={[
@@ -491,6 +558,28 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
           </TouchableOpacity>
         </ScrollView>
       </View>
+
+      {/* Provider Profile Modal */}
+      <ProviderProfileModal
+        provider={selectedProvider}
+        isVisible={showProfileModal}
+        onClose={() => {
+          setShowProfileModal(false);
+          setSelectedProvider(null);
+        }}
+        onBook={handleBookProvider}
+      />
+      
+      {/* Booking Modal */}
+      <BookingModal
+        visible={showBookingModal}
+        provider={bookingProvider}
+        onClose={() => setShowBookingModal(false)}
+        onBooked={(bookingId) => {
+          setShowBookingModal(false);
+          Alert.alert('Booking Confirmed', `Your booking (ID: ${bookingId}) has been placed.`);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -733,6 +822,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    position: 'relative',
+  },
+  featuredBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  featuredBadgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomLeftRadius: 16,
+    borderTopRightRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+    // Gradient effect - using orange to pink
+    backgroundColor: '#f97316', // fallback orange
+  },
+  featuredBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
   providerInfo: {
     flexDirection: 'row',
@@ -829,21 +947,6 @@ const styles = StyleSheet.create({
   brandImage: {
     width: '100%',
     height: '100%',
-  },
-  moreImagesContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-  },
-  moreImagesText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
   },
   brandImagePlaceholder: {
     width: 70,
