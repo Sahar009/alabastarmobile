@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'http://localhost:8000/api'; // Update this to your backend URL
+export const API_BASE_URL = 'https://alabastar-backend.onrender.com/api'; // Update this to your backend URL
 
 // API Response Interface
 interface ApiResponse<T = any> {
@@ -110,6 +110,10 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
+    const method = options.method || 'GET';
+    
+    // Immediate log to verify function is called
+    console.warn('🚀 API Request initiated:', method, url);
     
     const config: RequestInit = {
       ...options,
@@ -119,17 +123,101 @@ class ApiService {
       },
     };
 
+    // Log request details
+    const requestBody = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : null;
+    const headersObj = config.headers as Record<string, string>;
+    
+    // Use console.warn for visibility in Metro terminal
+    console.warn('\n========================================');
+    console.warn('📤 API REQUEST');
+    console.warn('========================================');
+    console.warn('Method:', method);
+    console.warn('URL:', url);
+    console.warn('Headers:', JSON.stringify({
+      ...headersObj,
+      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
+    }, null, 2));
+    if (requestBody) {
+      console.warn('Body:', JSON.stringify(requestBody, null, 2));
+    }
+    console.warn('Timestamp:', new Date().toISOString());
+    console.warn('========================================\n');
+    
+    // Also log to console.log for DevTools
+    console.log('\n========================================');
+    console.log('📤 API REQUEST');
+    console.log('========================================');
+    console.log('Method:', method);
+    console.log('URL:', url);
+    console.log('Headers:', {
+      ...headersObj,
+      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
+    });
+    if (requestBody) {
+      console.log('Body:', JSON.stringify(requestBody, null, 2));
+    }
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('========================================\n');
+
+    const startTime = Date.now();
+
     try {
       const response = await fetch(url, config);
+      const responseTime = Date.now() - startTime;
       const data = await response.json();
 
+      // Log response details
+      console.warn('\n========================================');
+      console.warn('📥 API RESPONSE');
+      console.warn('========================================');
+      console.warn('Method:', method);
+      console.warn('URL:', url);
+      console.warn('Status:', response.status, response.statusText);
+      console.warn('Response Time:', `${responseTime}ms`);
+      console.warn('Response Data:', JSON.stringify(data, null, 2));
+      console.warn('Timestamp:', new Date().toISOString());
+      console.warn('========================================\n');
+      
+      // Also log to console.log for DevTools
+      console.log('\n========================================');
+      console.log('📥 API RESPONSE');
+      console.log('========================================');
+      console.log('Method:', method);
+      console.log('URL:', url);
+      console.log('Status:', response.status, response.statusText);
+      console.log('Response Time:', `${responseTime}ms`);
+      console.log('Response Data:', JSON.stringify(data, null, 2));
+      console.log('Timestamp:', new Date().toISOString());
+      console.log('========================================\n');
+
       if (!response.ok) {
+        console.error('\n========================================');
+        console.error('❌ API ERROR RESPONSE');
+        console.error('========================================');
+        console.error('Method:', method);
+        console.error('URL:', url);
+        console.error('Status:', response.status);
+        console.error('Error:', data.message || `HTTP error! status: ${response.status}`);
+        console.error('Response Data:', JSON.stringify(data, null, 2));
+        console.error('========================================\n');
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
 
       return data;
     } catch (error) {
-      console.error('API request failed:', error);
+      const responseTime = Date.now() - startTime;
+      console.error('\n========================================');
+      console.error('❌ API REQUEST FAILED');
+      console.error('========================================');
+      console.error('Method:', method);
+      console.error('URL:', url);
+      console.error('Response Time:', `${responseTime}ms`);
+      console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
+      if (error instanceof Error && error.stack) {
+        console.error('Stack:', error.stack);
+      }
+      console.error('Timestamp:', new Date().toISOString());
+      console.error('========================================\n');
       throw error;
     }
   }
@@ -181,17 +269,94 @@ class ApiService {
       body: formData,
     };
 
+    const headersObj = config.headers as Record<string, string>;
+    
+    // Use console.warn for visibility in Metro terminal
+    console.warn('\n========================================');
+    console.warn('📤 API REQUEST (FormData)');
+    console.warn('========================================');
+    console.warn('Method: POST');
+    console.warn('URL:', url);
+    console.warn('Headers:', JSON.stringify({
+      ...headersObj,
+      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
+    }, null, 2));
+    console.warn('Body: [FormData - file upload]');
+    console.warn('Timestamp:', new Date().toISOString());
+    console.warn('========================================\n');
+    
+    // Also log to console.log for DevTools
+    console.log('\n========================================');
+    console.log('📤 API REQUEST (FormData)');
+    console.log('========================================');
+    console.log('Method: POST');
+    console.log('URL:', url);
+    console.log('Headers:', {
+      ...headersObj,
+      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
+    });
+    console.log('Body: [FormData - file upload]');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('========================================\n');
+
+    const startTime = Date.now();
+
     try {
       const response = await fetch(url, config);
+      const responseTime = Date.now() - startTime;
       const data = await response.json();
 
+      console.warn('\n========================================');
+      console.warn('📥 API RESPONSE');
+      console.warn('========================================');
+      console.warn('Method: POST');
+      console.warn('URL:', url);
+      console.warn('Status:', response.status, response.statusText);
+      console.warn('Response Time:', `${responseTime}ms`);
+      console.warn('Response Data:', JSON.stringify(data, null, 2));
+      console.warn('Timestamp:', new Date().toISOString());
+      console.warn('========================================\n');
+      
+      // Also log to console.log for DevTools
+      console.log('\n========================================');
+      console.log('📥 API RESPONSE');
+      console.log('========================================');
+      console.log('Method: POST');
+      console.log('URL:', url);
+      console.log('Status:', response.status, response.statusText);
+      console.log('Response Time:', `${responseTime}ms`);
+      console.log('Response Data:', JSON.stringify(data, null, 2));
+      console.log('Timestamp:', new Date().toISOString());
+      console.log('========================================\n');
+
       if (!response.ok) {
+        console.error('\n========================================');
+        console.error('❌ API ERROR RESPONSE');
+        console.error('========================================');
+        console.error('Method: POST');
+        console.error('URL:', url);
+        console.error('Status:', response.status);
+        console.error('Error:', data.message || `HTTP error! status: ${response.status}`);
+        console.error('Response Data:', JSON.stringify(data, null, 2));
+        console.error('========================================\n');
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
 
       return data;
     } catch (error) {
-      console.error('Profile picture upload failed:', error);
+      const responseTime = Date.now() - startTime;
+      console.error('\n========================================');
+      console.error('❌ API REQUEST FAILED');
+      console.error('========================================');
+      console.error('Method: POST');
+      console.error('URL:', url);
+      console.error('Response Time:', `${responseTime}ms`);
+      console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
+      if (error instanceof Error && error.stack) {
+        console.error('Stack:', error.stack);
+      }
+      console.error('Timestamp:', new Date().toISOString());
+      console.error('========================================\n');
       throw error;
     }
   }
@@ -272,20 +437,206 @@ class ApiService {
     page?: number;
     limit?: number;
     status?: string;
+    search?: string;
+    userType?: 'customer' | 'provider';
   }): Promise<ApiResponse<any>> {
+    const { userType = 'customer', ...restParams } = params || {};
+
     const queryString = new URLSearchParams(
-      Object.entries(params || {}).reduce((acc, [key, value]) => {
-        if (value !== undefined) {
+      Object.entries(restParams).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null) {
           acc[key] = String(value);
         }
         return acc;
       }, {} as Record<string, string>)
     ).toString();
-    return this.request(`/bookings?userType=customer${queryString ? `&${queryString}` : ''}`);
+
+    return this.request(`/bookings?userType=${userType}${queryString ? `&${queryString}` : ''}`);
   }
 
   async getBookingById(bookingId: string): Promise<ApiResponse<any>> {
     return this.request(`/bookings/${bookingId}`);
+  }
+
+  async getProviderProfile(): Promise<ApiResponse<any>> {
+    return this.request('/providers/profile');
+  }
+
+  async updateProviderProfile(payload: any): Promise<ApiResponse<any>> {
+    return this.request('/providers/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async addProviderPortfolioImage(url: string): Promise<ApiResponse<any>> {
+    return this.request('/providers/portfolio', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async removeProviderPortfolioImage(imageUrl: string): Promise<ApiResponse<any>> {
+    return this.request('/providers/portfolio', {
+      method: 'DELETE',
+      body: JSON.stringify({ url: imageUrl }),
+    });
+  }
+
+  async uploadProviderDocument(providerId: string, formData: FormData): Promise<ApiResponse<any>> {
+    await this.loadToken();
+    const url = `${this.baseURL}/providers/${providerId}/documents`;
+    
+    const config: RequestInit = {
+      method: 'POST',
+      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      body: formData,
+    };
+
+    const startTime = Date.now();
+    try {
+      const response = await fetch(url, config);
+      const responseTime = Date.now() - startTime;
+      const data = await response.json();
+
+      console.log('📥 Upload document response:', {
+        status: response.status,
+        responseTime: `${responseTime}ms`,
+        data,
+      });
+
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('❌ Upload document error:', error);
+      throw error;
+    }
+  }
+
+  async deleteProviderDocument(providerId: string, documentId: string): Promise<ApiResponse> {
+    return this.request(`/providers/${providerId}/documents/${documentId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getProviderFeatureLimits(providerId: string): Promise<ApiResponse<any>> {
+    return this.request(`/providers/${providerId}/feature-limits`);
+  }
+
+  async uploadProviderVideo(providerId: string, videoData: {
+    videoUrl: string;
+    videoThumbnail?: string;
+    videoDuration: number;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/providers/${providerId}/video`, {
+      method: 'POST',
+      body: JSON.stringify(videoData),
+    });
+  }
+
+  async deleteProviderVideo(providerId: string): Promise<ApiResponse> {
+    return this.request(`/providers/${providerId}/video`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getProviderSettings(): Promise<ApiResponse<any>> {
+    return this.request('/providers/settings');
+  }
+
+  async updateProviderSettings(payload: any): Promise<ApiResponse<any>> {
+    return this.request('/providers/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateProviderNotificationSettings(settings: Record<string, boolean>): Promise<ApiResponse<any>> {
+    return this.request('/providers/settings/notifications', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async updateProviderPrivacySettings(settings: Record<string, boolean>): Promise<ApiResponse<any>> {
+    return this.request('/providers/settings/privacy', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async getProviderSubscription(): Promise<ApiResponse<any>> {
+    return this.request('/subscriptions/my-subscription');
+  }
+
+  async getProviderSubscriptionHistory(): Promise<ApiResponse<any>> {
+    return this.request('/subscriptions/history');
+  }
+
+  async getSubscriptionPlans(): Promise<ApiResponse<any>> {
+    return this.request('/subscription-plans/plans');
+  }
+
+  async initializeProviderSubscription(subscriptionPlanId: string): Promise<ApiResponse<any>> {
+    return this.request('/subscriptions/initialize-payment', {
+      method: 'POST',
+      body: JSON.stringify({ subscriptionPlanId }),
+    });
+  }
+
+  async cancelProviderSubscription(subscriptionId?: string): Promise<ApiResponse<any>> {
+    return this.request('/subscriptions/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ subscriptionId }),
+    });
+  }
+
+  async reactivateProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
+    return this.request('/subscriptions/reactivate', {
+      method: 'POST',
+      body: JSON.stringify({ subscriptionId }),
+    });
+  }
+
+  // Referral methods
+  async generateReferralCode(providerId?: string): Promise<ApiResponse<any>> {
+    if (providerId) {
+      return this.request(`/referrals/generate/${providerId}`, {
+        method: 'POST',
+      });
+    }
+    return this.request('/referrals/generate', {
+      method: 'POST',
+    });
+  }
+
+  async getReferralStats(providerId?: string): Promise<ApiResponse<any>> {
+    if (providerId) {
+      return this.request(`/referrals/stats/${providerId}`);
+    }
+    return this.request('/referrals/stats');
+  }
+
+  async getReferralHistory(params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse<any>> {
+    const queryString = new URLSearchParams(
+      Object.entries(params || {}).reduce((acc, [key, value]) => {
+        if (value !== undefined && value !== null) {
+          acc[key] = String(value);
+        }
+        return acc;
+      }, {} as Record<string, string>)
+    ).toString();
+    return this.request(`/referrals/history${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async validateReferralCode(code: string): Promise<ApiResponse<any>> {
+    return this.request(`/referrals/validate/${code}`);
   }
 
   async updateBookingStatus(bookingId: string, status: string): Promise<ApiResponse> {
@@ -334,6 +685,68 @@ class ApiService {
     return this.request<AuthResponse>('/auth/firebase', {
       method: 'POST',
       body: JSON.stringify(firebaseData),
+    });
+  }
+
+  // Earnings & Wallet APIs
+  async getEarningsStats(): Promise<ApiResponse> {
+    await this.loadToken();
+    return this.request<ApiResponse>('/earnings/stats', { method: 'GET' });
+  }
+
+  async getTransactions(params?: {
+    type?: string;
+    dateRange?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<ApiResponse> {
+    await this.loadToken();
+    const queryParams = new URLSearchParams();
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.dateRange) queryParams.append('dateRange', params.dateRange);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+    const queryString = queryParams.toString();
+    return this.request<ApiResponse>(`/earnings/transactions${queryString ? `?${queryString}` : ''}`, { method: 'GET' });
+  }
+
+  async requestWithdrawal(data: {
+    amount: number;
+    bankName: string;
+    accountNumber: string;
+    accountName: string;
+  }): Promise<ApiResponse> {
+    await this.loadToken();
+    return this.request<ApiResponse>('/wallet/withdraw', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: data.amount,
+        withdrawalMethod: 'bank_transfer',
+        bankDetails: {
+          bankName: data.bankName,
+          accountNumber: data.accountNumber,
+          accountName: data.accountName,
+        },
+      }),
+    });
+  }
+
+  async getBanks(): Promise<ApiResponse> {
+    await this.loadToken();
+    return this.request<ApiResponse>('/paystack/banks', { method: 'GET' });
+  }
+
+  async verifyAccount(accountNumber: string, bankCode: string): Promise<ApiResponse> {
+    await this.loadToken();
+    return this.request<ApiResponse>('/paystack/verify-account', {
+      method: 'POST',
+      body: JSON.stringify({
+        accountNumber,
+        bankCode,
+      }),
     });
   }
 }

@@ -24,6 +24,7 @@ import {
   MoreVertical 
 } from 'lucide-react-native';
 import { messagingService, Conversation, Message, User } from '../services/messagingService';
+import { apiService } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -76,26 +77,58 @@ const MessagingScreen: React.FC<MessagingScreenProps> = ({
 
   const initializeMessaging = async () => {
     try {
+      // Load token from API service to ensure it's up to date
+      await apiService.loadToken();
+      
       const token = await AsyncStorage.getItem('token');
       const userJson = await AsyncStorage.getItem('user');
       
-      if (!token || !userJson) {
+      if (!token) {
         Alert.alert('Error', 'Please login to continue');
+        onNavigate?.('home');
+        return;
+      }
+
+      if (!userJson) {
+        Alert.alert('Error', 'User data not found');
+        onNavigate?.('home');
         return;
       }
 
       const user = JSON.parse(userJson);
       setCurrentUserId(user.id);
 
-      // Connect socket
+      console.log('🔌 Connecting to messaging server with token:', token.substring(0, 20) + '...');
+
+      // Verify token is valid by making a test API call first
+      try {
+        const verifyResponse = await apiService.verifyToken();
+        if (!verifyResponse.success) {
+          throw new Error('Token verification failed');
+        }
+        console.log('✅ Token verified successfully');
+      } catch (verifyError) {
+        console.error('❌ Token verification failed:', verifyError);
+        Alert.alert(
+          'Authentication Error', 
+          'Your session has expired. Please login again.',
+          [
+            { text: 'OK', onPress: () => onNavigate?.('home') }
+          ]
+        );
+        return;
+      }
+
+      // Connect socket with token
       await messagingService.connect(token);
 
       // Load conversations
       await loadConversations();
 
       setLoading(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Initialization error:', error);
+      Alert.alert('Connection Error', error?.message || 'Failed to connect to messaging service. Please try again.');
       setLoading(false);
     }
   };

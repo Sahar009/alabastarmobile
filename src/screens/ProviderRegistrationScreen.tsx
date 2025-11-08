@@ -32,6 +32,7 @@ import {
   FileText,
   Camera,
   Award,
+  X,
 } from 'lucide-react-native';
 import * as ImagePicker from 'react-native-image-picker';
 import { apiService, API_BASE_URL } from '../services/api';
@@ -470,9 +471,23 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
       return;
     }
 
+    // Validate required fields before payment
+    if (!formData.fullName || !formData.email || !formData.businessName || !formData.category) {
+      Alert.alert(
+        'Missing Information',
+        'Please complete all required fields:\n• Full Name\n• Email\n• Business Name\n• Category\n\nGo back to previous steps to fill missing information.'
+      );
+      return;
+    }
+
     setIsInitializingPayment(true);
     try {
-      const result = await providerOnboardingService.initializePayment(formData.subscriptionPlanId);
+      const result = await providerOnboardingService.initializePayment(formData.subscriptionPlanId, {
+        fullName: formData.fullName,
+        email: formData.email,
+        businessName: formData.businessName,
+        category: formData.category,
+      });
       const paymentInfo = result.data || result;
 
       if (paymentInfo?.reference) {
@@ -923,7 +938,7 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
         disabled={isInitializingPayment}
       >
         <Text style={styles.primaryButtonText}>
-          {isInitializingPayment ? 'Initializing payment…' : 'Proceed to Paystack'}
+          {isInitializingPayment ? 'Initializing payment…' : 'Proceed to Payment'}
         </Text>
       </TouchableOpacity>
     </View>

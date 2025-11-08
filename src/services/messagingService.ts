@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 
-const API_BASE_URL = 'http://localhost:8000/api';
-const SOCKET_URL = 'http://localhost:8000';
+const API_BASE_URL = 'https://alabastar-backend.onrender.com/api';
+const SOCKET_URL = 'https://alabastar-backend.onrender.com/api';
 
 // Types
 export interface Conversation {
@@ -43,28 +43,60 @@ class MessagingService {
 
   // Socket connection
   async connect(token: string): Promise<void> {
-    if (this.socket?.connected) {
-      return;
+    // Disconnect existing connection if any
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
 
+    if (!token || token.trim() === '') {
+      throw new Error('Token is required for socket connection');
+    }
+
+    console.log('🔌 Initializing socket connection...');
+
     this.socket = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket'],
+      auth: { 
+        token: token.trim() // Ensure token is trimmed
+      },
+      transports: ['websocket', 'polling'], // Allow fallback to polling
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      timeout: 20000,
+      forceNew: true, // Force new connection
     });
 
     this.socket.on('connect', () => {
       console.log('✅ Connected to messaging server');
+      console.log('Socket ID:', this.socket?.id);
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('❌ Disconnected from messaging server');
+    this.socket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from messaging server:', reason);
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
+      console.error('❌ Connection error:', error);
+      console.error('Error message:', error.message);
+      // Don't throw here, let the caller handle it
+    });
+
+    // Wait for connection or error
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Connection timeout'));
+      }, 10000);
+
+      this.socket!.on('connect', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      this.socket!.on('connect_error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
     });
   }
 
@@ -202,4 +234,5 @@ class MessagingService {
 }
 
 export const messagingService = new MessagingService();
+
 

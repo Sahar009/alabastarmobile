@@ -20,12 +20,38 @@ import ProvidersScreen from './src/screens/ProvidersScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import LocationSelectionScreen from './src/screens/LocationSelectionScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ProviderProfileManagementScreen from './src/screens/ProviderProfileManagementScreen';
+import ProviderSettingsScreen from './src/screens/ProviderSettingsScreen';
+import ProviderSubscriptionScreen from './src/screens/ProviderSubscriptionScreen';
+import ProviderReferralScreen from './src/screens/ProviderReferralScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import BookingsScreen from './src/screens/BookingsScreen';
+import ProviderBookingsScreen from './src/screens/ProviderBookingsScreen';
+import ProviderEarningsScreen from './src/screens/ProviderEarningsScreen';
 import MessagingScreen from './src/screens/MessagingScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import AboutScreen from './src/screens/AboutScreen';
+import HelpSupportScreen from './src/screens/HelpSupportScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 
-type AppScreen = 'onboarding' | 'user-type-selection' | 'auth' | 'home' | 'location-selection' | 'providers' | 'profile' | 'notifications' | 'bookings' | 'messages';
+type AppScreen =
+  | 'onboarding'
+  | 'user-type-selection'
+  | 'auth'
+  | 'home'
+  | 'location-selection'
+  | 'providers'
+  | 'profile'
+  | 'notifications'
+  | 'bookings'
+  | 'messages'
+  | 'earnings'
+  | 'provider-settings'
+  | 'provider-subscription'
+  | 'provider-referrals'
+  | 'settings'
+  | 'about'
+  | 'help-support';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -38,6 +64,8 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [messageRecipientId, setMessageRecipientId] = useState<string | null>(null);
+  const [messageBookingId, setMessageBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     checkFirstLaunch();
@@ -70,7 +98,16 @@ function App() {
         const user = JSON.parse(userJson);
         setUserData(user);
         _setIsAuthenticated(true);
-        setCurrentScreen('home');
+        
+        // Check if user is a provider and route accordingly
+        const isProvider = user?.role === 'provider';
+        if (isProvider) {
+          setActiveTab('bookings');
+          setCurrentScreen('bookings');
+        } else {
+          setCurrentScreen('home');
+          setActiveTab('home');
+        }
         
         // Load token into apiService for future API calls
         await apiService.loadToken();
@@ -110,14 +147,22 @@ function App() {
 
   const handleAuthSuccess = (authUserData: any) => {
     console.log('Authentication successful!', { userType, authUserData });
-    setUserData(authUserData);
+    // Extract user from response data (response.data.user)
+    const user = authUserData?.user || authUserData;
+    setUserData(user);
     _setIsAuthenticated(true);
     
-    if (userType === 'user') {
-      setCurrentScreen('home');
+    // Check both userType and the actual role from userData
+    const isProvider = userType === 'provider' || user?.role === 'provider';
+    
+    if (isProvider) {
+      // Providers go directly to bookings screen after sign in
+      setActiveTab('bookings');
+      setCurrentScreen('bookings');
     } else {
-      // For providers, you might want to show a different screen
+      // Regular users go to home screen
       setCurrentScreen('home');
+      setActiveTab('home');
     }
   };
 
@@ -216,15 +261,18 @@ function App() {
     setActiveTab(tab);
     
     // Handle tab navigation based on active tab
-    switch(tab) {
+    switch (tab) {
       case 'home':
         setCurrentScreen('home');
         break;
       case 'search':
-        setCurrentScreen('home'); // Navigate to providers search
+        setCurrentScreen('home');
         break;
       case 'bookings':
         setCurrentScreen('bookings');
+        break;
+      case 'earnings':
+        setCurrentScreen('earnings');
         break;
       case 'messages':
         setCurrentScreen('messages');
@@ -300,13 +348,51 @@ function App() {
         );
       
       case 'profile':
+        if (userData?.role === 'provider') {
+          return (
+            <ProviderProfileManagementScreen
+              userData={userData}
+              onBack={() => {
+                setActiveTab('home');
+                setCurrentScreen('home');
+              }}
+              onLogout={handleLogout}
+              onNavigate={(screen) => {
+                if (screen === 'provider-settings') {
+                  setActiveTab('profile');
+                  setCurrentScreen('provider-settings');
+                } else if (screen === 'provider-subscription') {
+                  setActiveTab('profile');
+                  setCurrentScreen('provider-subscription');
+                }
+              }}
+            />
+          );
+        }
+
         return (
           <ProfileScreen 
             userData={userData}
             onLogout={handleLogout}
             onNavigate={(screen) => {
-              // Handle navigation to other screens from profile
-              console.log('Navigate to:', screen);
+              switch (screen) {
+                case 'Bookings':
+                  setActiveTab('bookings');
+                  setCurrentScreen('bookings');
+                  break;
+                case 'Messages':
+                  setActiveTab('messages');
+                  setCurrentScreen('messages');
+                  break;
+                case 'Notifications':
+                  setCurrentScreen('notifications');
+                  break;
+                case 'Settings':
+                  setCurrentScreen('settings');
+                  break;
+                default:
+                  console.log('Navigate to:', screen);
+              }
             }}
           />
         );
@@ -323,22 +409,164 @@ function App() {
         );
       
       case 'bookings':
+        if (userData?.role === 'provider') {
+          return (
+            <ProviderBookingsScreen
+              userData={userData}
+              onNavigate={(screen) => {
+                if (screen === 'messages') {
+                  setCurrentScreen('messages');
+                }
+              }}
+            />
+          );
+        }
+
         return (
-          <BookingsScreen 
+          <BookingsScreen
             userData={userData}
-            onNavigate={(screen) => {
-              // Handle navigation to other screens from bookings
-              console.log('Navigate to:', screen);
+            onNavigate={(screen, params) => {
+              if (screen === 'messages' && params) {
+                setMessageRecipientId(params.recipientId || null);
+                setMessageBookingId(params.bookingId || null);
+                setActiveTab('messages');
+                setCurrentScreen('messages');
+              } else {
+                console.log('Navigate to:', screen);
+              }
             }}
           />
         );
-      
+
+      case 'earnings':
+        if (userData?.role === 'provider') {
+          return (
+            <ProviderEarningsScreen
+              userData={userData}
+              onNavigate={(screen) => {
+                if (screen === 'messages') {
+                  setCurrentScreen('messages');
+                } else if (screen === 'provider-referrals') {
+                  setActiveTab('earnings');
+                  setCurrentScreen('provider-referrals');
+                }
+              }}
+            />
+          );
+        }
+
+        return (
+          <BookingsScreen
+            userData={userData}
+            onNavigate={(screen, params) => {
+              if (screen === 'messages' && params) {
+                setMessageRecipientId(params.recipientId || null);
+                setMessageBookingId(params.bookingId || null);
+                setActiveTab('messages');
+                setCurrentScreen('messages');
+              } else {
+                console.log('Navigate to:', screen);
+              }
+            }}
+          />
+        );
+
       case 'messages':
         return (
           <MessagingScreen 
             userData={userData}
+            recipientId={messageRecipientId || undefined}
+            bookingId={messageBookingId || undefined}
             onNavigate={(screen) => {
               setCurrentScreen(screen as AppScreen);
+            }}
+          />
+        );
+
+      case 'provider-settings':
+        return (
+          <ProviderSettingsScreen
+            userData={userData}
+            onBack={() => {
+              setActiveTab('profile');
+              setCurrentScreen('profile');
+            }}
+            onNavigate={(screen) => {
+              if (screen === 'provider-subscription') {
+                setActiveTab('profile');
+                setCurrentScreen('provider-subscription');
+              }
+            }}
+          />
+        );
+
+      case 'provider-subscription':
+        return (
+          <ProviderSubscriptionScreen
+            userData={userData}
+            onBack={() => {
+              setActiveTab('profile');
+              setCurrentScreen('profile');
+            }}
+            onNavigate={(screen) => {
+              if (screen === 'provider-settings') {
+                setCurrentScreen('provider-settings');
+              }
+            }}
+          />
+        );
+
+      case 'provider-referrals':
+        return (
+          <ProviderReferralScreen
+            userData={userData}
+            onBack={() => {
+              setActiveTab('earnings');
+              setCurrentScreen('earnings');
+            }}
+          />
+        );
+
+      case 'settings':
+        return (
+          <SettingsScreen
+            userData={userData}
+            onBack={() => {
+              setActiveTab('profile');
+              setCurrentScreen('profile');
+            }}
+            onNavigate={(screen) => {
+              switch (screen) {
+                case 'About':
+                  setCurrentScreen('about');
+                  break;
+                case 'HelpSupport':
+                  setCurrentScreen('help-support');
+                  break;
+                default:
+                  console.log('Navigate to:', screen);
+              }
+            }}
+            onLogout={handleLogout}
+          />
+        );
+
+      case 'about':
+        return (
+          <AboutScreen
+            userData={userData}
+            onBack={() => {
+              setCurrentScreen('settings');
+            }}
+          />
+        );
+
+      case 'help-support':
+        return (
+          <HelpSupportScreen
+            userData={userData}
+            onBack={() => {
+              setCurrentScreen('settings');
             }}
           />
         );
@@ -349,7 +577,25 @@ function App() {
   };
 
   // Determine if we should show bottom navigation
-  const shouldShowBottomNav = _isAuthenticated && ['home', 'profile', 'providers', 'notifications', 'bookings', 'messages'].includes(currentScreen);
+  const shouldShowBottomNav =
+    _isAuthenticated &&
+    [
+      'home',
+      'profile',
+      'providers',
+      'notifications',
+      'bookings',
+      'earnings',
+      'messages',
+      'provider-settings',
+      'provider-subscription',
+      'provider-referrals',
+      'settings',
+      'about',
+      'help-support',
+    ].includes(
+      currentScreen,
+    );
 
   return (
     <SafeAreaProvider>
@@ -360,6 +606,7 @@ function App() {
           <BottomNavigation 
             activeTab={activeTab} 
             onTabChange={handleTabChange}
+            isProvider={userData?.role === 'provider'}
           />
         )}
       </View>

@@ -464,6 +464,32 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                       </View>
                     </View>
 
+                    {/* Subcategories */}
+                    {(() => {
+                      const subcats = Array.isArray(provider.subcategories) ? provider.subcategories : [];
+                      return subcats.length > 0 ? (
+                        <View style={styles.providerSubcategoriesContainer}>
+                          {subcats.slice(0, 3).map((subcat: string, idx: number) => {
+                            // Format subcategory name: convert snake_case to Title Case
+                            const formattedName = subcat
+                              .split('_')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                              .join(' ');
+                            return (
+                              <View key={idx} style={styles.providerSubcategoryChip}>
+                                <Text style={styles.providerSubcategoryText}>{formattedName}</Text>
+                              </View>
+                            );
+                          })}
+                          {subcats.length > 3 && (
+                            <View style={styles.providerSubcategoryChip}>
+                              <Text style={styles.providerSubcategoryText}>+{subcats.length - 3}</Text>
+                            </View>
+                          )}
+                        </View>
+                      ) : null;
+                    })()}
+
                     {/* Featured Badge */}
                     {provider.isTopListed && (
                       <View style={styles.featuredBadge}>
@@ -475,19 +501,59 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                     )}
 
                     <View style={styles.providerBrandImages}>
-                      {/* Brand Images - Combine brandImages and portfolio */}
+                      {/* Brand Images - Extract from portfolio.brandImages */}
                       {(() => {
-                        // Collect all available images
+                        // Collect brand images from portfolio.brandImages (nested structure)
                         let allImages: string[] = [];
+                        const portfolio = (provider as any).portfolio;
                         
-                        // Add brand images
-                        if (provider.brandImages && provider.brandImages.length > 0) {
-                          allImages = provider.brandImages.map((img: any) => img.url || img);
+                        // Check if portfolio is an object with brandImages (new structure)
+                        if (portfolio && typeof portfolio === 'object' && !Array.isArray(portfolio)) {
+                          // Check portfolio.brandImages first (new nested structure)
+                          if (portfolio.brandImages && Array.isArray(portfolio.brandImages)) {
+                            allImages = portfolio.brandImages
+                              .map((img: any) => {
+                                if (typeof img === 'string') return img;
+                                if (img?.url) return img.url;
+                                return null;
+                              })
+                              .filter((url: any) => url && typeof url === 'string' && !url.startsWith('blob:'));
+                          }
+                          
+                          // Add portfolio documents/images if we have less than 3
+                          if (allImages.length < 3 && portfolio.documents && Array.isArray(portfolio.documents)) {
+                            const portfolioUrls = portfolio.documents
+                              .map((doc: any) => {
+                                if (typeof doc === 'string') return doc;
+                                if (doc?.url) return doc.url;
+                                return null;
+                              })
+                              .filter((url: any) => url && typeof url === 'string');
+                            allImages = [...allImages, ...portfolioUrls];
+                          }
                         }
                         
-                        // Add portfolio images if we have less than 3
-                        if (allImages.length < 3 && provider.portfolio && provider.portfolio.length > 0) {
-                          allImages = [...allImages, ...provider.portfolio];
+                        // Fallback to root-level brandImages if portfolio.brandImages is not available
+                        if (allImages.length === 0 && provider.brandImages && Array.isArray(provider.brandImages)) {
+                          allImages = provider.brandImages
+                            .map((img: any) => {
+                              if (typeof img === 'string') return img;
+                              if (img?.url) return img.url;
+                              return null;
+                            })
+                            .filter((url: any) => url && typeof url === 'string' && !url.startsWith('blob:'));
+                        }
+                        
+                        // Fallback to portfolio array if it's an array
+                        if (allImages.length < 3 && Array.isArray(provider.portfolio)) {
+                          const portfolioUrls = provider.portfolio
+                            .map((img: any) => {
+                              if (typeof img === 'string') return img;
+                              if (img?.url) return img.url;
+                              return null;
+                            })
+                            .filter((url: any) => url && typeof url === 'string');
+                          allImages = [...allImages, ...portfolioUrls];
                         }
                         
                         // Remove duplicates and take first 3
@@ -914,6 +980,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#10b981',
     marginLeft: 4,
+    fontWeight: '500',
+  },
+  providerSubcategoriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  providerSubcategoryChip: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  providerSubcategoryText: {
+    fontSize: 11,
+    color: '#64748b',
     fontWeight: '500',
   },
   providerBrandImages: {

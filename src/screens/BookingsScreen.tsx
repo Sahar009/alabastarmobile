@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,9 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
-  Image,
   Linking,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -19,15 +17,10 @@ import {
   Clock,
   MapPin,
   CheckCircle,
-  XCircle,
-  AlertCircle,
-  ChevronRight,
-  RefreshCw,
   Filter,
   Star,
   MessageCircle,
   Phone,
-  Trash2,
   MessageSquare,
 } from 'lucide-react-native';
 import { apiService } from '../services/api';
@@ -43,6 +36,7 @@ interface Booking {
     subcategories?: string[];
     portfolio?: string[];
     User?: {
+      id: string;
       fullName: string;
       phone: string;
       email: string;
@@ -63,11 +57,10 @@ interface Booking {
 
 interface BookingsScreenProps {
   userData: any;
-  onNavigate?: (screen: string) => void;
+  onNavigate?: (screen: string, params?: { recipientId?: string; bookingId?: string }) => void;
 }
 
 const BookingsScreen: React.FC<BookingsScreenProps> = ({
-  userData,
   onNavigate,
 }) => {
   const [loading, setLoading] = useState(true);
@@ -79,11 +72,7 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
   const [showRatingScreen, setShowRatingScreen] = useState(false);
   const [bookingToRate, setBookingToRate] = useState<Booking | null>(null);
 
-  useEffect(() => {
-    fetchBookings();
-  }, [filter]);
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -113,27 +102,15 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchBookings();
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'completed':
-        return <CheckCircle size={16} color="#10b981" />;
-      case 'cancelled':
-        return <XCircle size={16} color="#ef4444" />;
-      case 'requested':
-      case 'accepted':
-        return <AlertCircle size={16} color="#f59e0b" />;
-      case 'in_progress':
-        return <Clock size={16} color="#2563EB" />;
-      default:
-        return <Clock size={16} color="#64748b" />;
-    }
   };
 
   const getStatusColor = (status: string) => {
@@ -215,50 +192,46 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
     }
   };
 
-  const handleCancelBooking = (booking: Booking) => {
-    Alert.alert(
-      'Cancel Booking',
-      'Are you sure you want to cancel this booking?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await apiService.cancelBooking(booking.id, 'Cancelled by customer');
-              
-              if (response.success) {
-                Alert.alert('Success', 'Booking cancelled successfully');
-                fetchBookings();
-              } else {
-                Alert.alert('Error', 'Failed to cancel booking');
-              }
-            } catch (error: any) {
-              console.error('Cancel booking error:', error);
-              Alert.alert('Error', error.message || 'Failed to cancel booking');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleCallProvider = (phone: string) => {
-    // Clean and format phone number
-    let cleanPhone = phone.replace(/[^\d+]/g, ''); // Remove all non-digit and non-plus characters
-    
-    // Ensure + is at the start
-    if (!cleanPhone.startsWith('+')) {
-      cleanPhone = `+${cleanPhone}`;
+    if (!phone) {
+      Alert.alert('Error', 'Phone number not available');
+      return;
     }
+
+    // Clean phone number - remove all non-digit characters except +
+    let cleanPhone = phone.trim();
+    
+    // Remove spaces and other characters
+    cleanPhone = cleanPhone.replace(/[\s\-()]/g, '');
+    
+    // If it starts with 0, replace with +234 (Nigeria)
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '+234' + cleanPhone.substring(1);
+    } else if (!cleanPhone.startsWith('+')) {
+      // If no + and doesn't start with country code, assume it's Nigeria
+      if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+        cleanPhone = '+234' + cleanPhone.replace(/^234/, '');
+      } else {
+        cleanPhone = '+' + cleanPhone;
+      }
+    }
+    
+    // Remove any remaining non-digit characters except +
+    cleanPhone = cleanPhone.replace(/[^\d+]/g, '');
     
     const telUrl = `tel:${cleanPhone}`;
     
-    Linking.openURL(telUrl)
+    Linking.canOpenURL(telUrl)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(telUrl);
+        } else {
+          Alert.alert('Error', 'Phone calls are not supported on this device');
+        }
+      })
       .catch((err) => {
         console.error('Error opening phone dialer:', err);
-        Alert.alert('Error', 'Unable to make phone call');
+        Alert.alert('Error', 'Unable to make phone call. Please check your device settings.');
       });
   };
 
@@ -282,29 +255,18 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
       });
   };
 
-  const handleSendMessage = (providerUserId: string) => {
+  const handleSendMessage = (providerUserId: string, bookingId?: string) => {
+    if (!providerUserId) {
+      Alert.alert('Error', 'Provider information not available');
+      return;
+    }
+
     // Navigate to messaging screen with provider ID
-    // For now, show an alert to indicate message feature
-    Alert.alert(
-      'Send Message',
-      'This will open the messaging screen. Would you like to send a message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Open Messages',
-          onPress: async () => {
-            try {
-              // Navigate to messages or send a quick message
-              // For now, we'll just show that the feature is available
-              Alert.alert('Success', 'Messaging feature will open here');
-            } catch (error: any) {
-              console.error('Message error:', error);
-              Alert.alert('Error', error.message || 'Unable to send message');
-            }
-          },
-        },
-      ]
-    );
+    if (onNavigate) {
+      onNavigate('messages', { recipientId: providerUserId, bookingId });
+    } else {
+      Alert.alert('Error', 'Navigation not available');
+    }
   };
 
   // Calculate stats
@@ -589,7 +551,7 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
                     <View style={styles.modalActions}>
                       <TouchableOpacity
                         style={styles.messageButton}
-                        onPress={() => handleSendMessage(selectedBooking.providerProfile!.User!.id)}
+                        onPress={() => handleSendMessage(selectedBooking.providerProfile!.User!.id, selectedBooking.id)}
                         activeOpacity={0.7}
                       >
                         <MessageCircle size={18} color="#ffffff" />

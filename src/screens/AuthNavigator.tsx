@@ -35,12 +35,46 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
   }, [userType]);
 
   useEffect(() => {
-    GoogleSignin.configure({
-      webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-      iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-      offlineAccess: true,
-      forceCodeForRefreshToken: true,
-    });
+    // Configure Google Sign-In only if we have the necessary credentials for the current platform
+    const hasWebClientId = Boolean(GOOGLE_WEB_CLIENT_ID);
+    const hasIosClientId = Boolean(GOOGLE_IOS_CLIENT_ID);
+    
+    // Platform-specific requirements:
+    // - iOS: Needs either iosClientId OR GoogleService-Info.plist
+    // - Android: Needs webClientId
+    const canConfigure = Platform.OS === 'ios' 
+      ? (hasIosClientId || hasWebClientId) // iOS can work with either
+      : hasWebClientId; // Android needs webClientId
+    
+    if (!canConfigure) {
+      console.warn(`Google Sign-In not configured for ${Platform.OS}: Missing required client IDs. Add to src/config/googleSignIn.ts`);
+      return;
+    }
+    
+    // Build config object conditionally
+    const config: any = {};
+    
+    // Only add webClientId if it exists (required for Android and offline access)
+    if (GOOGLE_WEB_CLIENT_ID) {
+      config.webClientId = GOOGLE_WEB_CLIENT_ID;
+    }
+    
+    // Only add iosClientId if it exists (required for iOS if GoogleService-Info.plist is missing)
+    if (GOOGLE_IOS_CLIENT_ID) {
+      config.iosClientId = GOOGLE_IOS_CLIENT_ID;
+    }
+    
+    // Only enable offline access if webClientId is configured
+    if (hasWebClientId) {
+      config.offlineAccess = true;
+      config.forceCodeForRefreshToken = true;
+    }
+    
+    try {
+      GoogleSignin.configure(config);
+    } catch (error) {
+      console.error('Error configuring Google Sign-In:', error);
+    }
   }, []);
 
   const navigateTo = (screen: AuthScreen) => {
@@ -134,12 +168,28 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
   };
 
   const handleGoogleSignIn = async () => {
-    if (!GOOGLE_WEB_CLIENT_ID) {
-      Alert.alert(
-        'Google Sign-In Not Configured',
-        'Add your Google web client ID to src/config/googleSignIn.ts before enabling Google authentication.'
-      );
-      return;
+    // Check platform-specific requirements
+    if (Platform.OS === 'ios') {
+      // iOS needs either iosClientId OR GoogleService-Info.plist
+      if (!GOOGLE_IOS_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID) {
+        Alert.alert(
+          'Google Sign-In Not Configured',
+          'For iOS, you need either:\n' +
+          '1. Add iOS client ID to src/config/googleSignIn.ts, OR\n' +
+          '2. Add GoogleService-Info.plist to your iOS project\n\n' +
+          'Read the iOS guide to learn more.'
+        );
+        return;
+      }
+    } else {
+      // Android needs webClientId
+      if (!GOOGLE_WEB_CLIENT_ID) {
+        Alert.alert(
+          'Google Sign-In Not Configured',
+          'Add your Google web client ID to src/config/googleSignIn.ts before enabling Google authentication.'
+        );
+        return;
+      }
     }
 
     if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {

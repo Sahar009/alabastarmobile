@@ -91,10 +91,25 @@ export const providerOnboardingService = {
     return handleJsonResponse(response) as Promise<{ files: UploadResult[] }>;
   },
 
-  async initializePayment(subscriptionPlanId: string) {
+  async initializePayment(subscriptionPlanId: string, additionalData?: {
+    fullName?: string;
+    email?: string;
+    businessName?: string;
+    category?: string;
+  }) {
     const token = await apiService.loadToken();
     if (!token) {
       throw new Error('Authentication required');
+    }
+
+    const payload: any = { subscriptionPlanId };
+    
+    // Add required fields if provided
+    if (additionalData) {
+      if (additionalData.fullName) payload.fullName = additionalData.fullName;
+      if (additionalData.email) payload.email = additionalData.email;
+      if (additionalData.businessName) payload.businessName = additionalData.businessName;
+      if (additionalData.category) payload.category = additionalData.category;
     }
 
     const response = await fetch(`${API_BASE_URL}/providers/initialize-payment`, {
@@ -103,7 +118,7 @@ export const providerOnboardingService = {
         ...jsonHeaders,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ subscriptionPlanId }),
+      body: JSON.stringify(payload),
     });
     return handleJsonResponse(response);
   },
@@ -115,4 +130,5 @@ export const providerOnboardingService = {
 };
 
 export type UploadServiceResult = Awaited<ReturnType<typeof providerOnboardingService.uploadDocuments>>;
+
 

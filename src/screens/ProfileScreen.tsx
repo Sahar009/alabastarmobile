@@ -21,17 +21,12 @@ import {
   LogOut,
   Bell,
   Settings,
-  Camera,
   Check,
   X,
   Calendar,
-  MapPin,
   MessageCircle,
-  CreditCard,
-  Star,
 } from 'lucide-react-native';
 import { apiService } from '../services/api';
-import { launchImageLibrary, launchCamera, ImagePickerResponse, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 
 interface ProfileScreenProps {
   userData: any;
@@ -47,7 +42,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Profile data
   const [fullName, setFullName] = useState(userData?.user?.fullName || '');
@@ -114,87 +108,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleImagePicker = () => {
     Alert.alert(
-      'Update Profile Picture',
-      'Choose an option',
-      [
-        {
-          text: 'Camera',
-          onPress: () => {
-            try {
-              const options: CameraOptions = {
-                mediaType: 'photo',
-                quality: 0.8,
-                includeBase64: false,
-              };
-              
-              launchCamera(options, (response: ImagePickerResponse) => {
-                if (response.didCancel) {
-                  return;
-                } else if (response.errorMessage) {
-                  Alert.alert('Error', response.errorMessage);
-                } else if (response.assets && response.assets[0] && response.assets[0].uri) {
-                  uploadImage(response.assets[0].uri);
-                }
-              });
-            } catch (error: any) {
-              console.error('Camera error:', error);
-              Alert.alert('Error', 'Failed to open camera. Please make sure the app has camera permissions.');
-            }
-          },
-        },
-        {
-          text: 'Photo Library',
-          onPress: () => {
-            const options: ImageLibraryOptions = {
-              mediaType: 'photo',
-              quality: 0.8,
-              includeBase64: false,
-            };
-            
-            launchImageLibrary(options, (response: ImagePickerResponse) => {
-              if (response.didCancel) {
-                return;
-              } else if (response.errorMessage) {
-                Alert.alert('Error', response.errorMessage);
-              } else if (response.assets && response.assets[0] && response.assets[0].uri) {
-                uploadImage(response.assets[0].uri);
-              }
-            });
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
+      'Profile Picture',
+      'Profile picture upload is not available at this time.',
+      [{ text: 'OK' }]
     );
   };
 
-  const uploadImage = async (imageUri: string) => {
-    try {
-      setUploadingImage(true);
-      
-      // Create FormData
-      const formData = new FormData();
-      formData.append('picture', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: 'profile.jpg',
-      } as any);
-
-      // Upload image
-      const response = await apiService.uploadProfilePicture(formData);
-      
-      if (response.success && response.data?.url) {
-        setAvatarUrl(response.data.url);
-        Alert.alert('Success', 'Profile picture updated successfully');
-      } else {
-        Alert.alert('Error', 'Failed to upload profile picture');
-      }
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      Alert.alert('Error', error.message || 'Failed to upload image');
-    } finally {
-      setUploadingImage(false);
-    }
-  };
 
   const handleNotificationToggle = async (type: 'email' | 'sms' | 'push') => {
     try {
@@ -332,22 +251,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <TouchableOpacity
             style={styles.avatarContainer}
             onPress={handleImagePicker}
-            disabled={uploadingImage || !editing}
+            disabled={!editing}
           >
-            {uploadingImage ? (
-              <View style={styles.avatarUploading}>
-                <ActivityIndicator size="large" color="#ec4899" />
-              </View>
-            ) : avatarUrl ? (
+            {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <User size={48} color="#ec4899" />
-              </View>
-            )}
-            {editing && (
-              <View style={styles.avatarEditBadge}>
-                <Camera size={16} color="#ffffff" />
               </View>
             )}
           </TouchableOpacity>
@@ -427,7 +337,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <AccountMenuItem
             icon={MessageCircle}
             label="Messages"
-            value="3 unread"
             onPress={() => onNavigate?.('Messages')}
             showArrow
             color="#ec4899"

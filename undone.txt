@@ -115,11 +115,11 @@ Creating the comparison summary:
 - Privacy settings
 - Subscription management
 
-#### 14. Provider Subscription
-- View subscription plans
-- Upgrade/downgrade
-- Payment history
-- Feature limits
+#### 14. Provider Subscription (Completed)
+- [x] View subscription plans
+- [x] Upgrade/downgrade
+- [x] Payment history
+- [x] Feature limits
 
 #### 15. Provider Support
 - Help center
@@ -147,11 +147,11 @@ Creating the comparison summary:
 - Rescheduling
 - Status workflow
 
-#### 19. funding/Referrals
-- Referral code display
-- Referral history
-- Commissions
-- Sharing tools
+#### 19. funding/Referrals (Completed)
+- [x] Referral code display
+- [x] Referral history
+- [x] Commissions
+- [x] Sharing tools
 
 #### 20. Other Components
 - Document viewer (DocumentViewerModal)

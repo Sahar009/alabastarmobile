@@ -8,7 +8,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ImageBackground,
+  Image,
   TextInput,
   KeyboardAvoidingView,
   Platform,
@@ -16,9 +16,6 @@ import {
 } from 'react-native';
 import {
   ArrowLeft,
-  Shield,
-  Star,
-  Zap,
   Mail,
   Lock,
   Eye,
@@ -32,7 +29,6 @@ interface ProviderAuthScreenProps {
   onForgotPassword?: () => void;
 }
 
-const heroImage = require('../../assets/provider-signin-bg.jpg');
 
 const ProviderAuthScreen: React.FC<ProviderAuthScreenProps> = ({
   onLogin,
@@ -45,11 +41,6 @@ const ProviderAuthScreen: React.FC<ProviderAuthScreenProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const features = [
-    { icon: Shield, label: 'Secure & Verified' },
-    { icon: Star, label: '5-Star Rated Platform' },
-    { icon: Zap, label: 'Instant Access' },
-  ];
 
   const handleForgotPassword = () => {
     if (onForgotPassword) {
@@ -101,38 +92,21 @@ const ProviderAuthScreen: React.FC<ProviderAuthScreenProps> = ({
           showsVerticalScrollIndicator={false}
         >
           <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.8}>
-            <ArrowLeft size={18} color="#0f172a" />
+            <ArrowLeft size={20} color="#0f172a" />
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
 
-          <View style={styles.heroWrapper}>
-            <ImageBackground
-              source={heroImage}
-              style={styles.heroImage}
-              imageStyle={styles.heroImageStyle}
-            >
-              <View style={styles.heroOverlay} />
-              <View style={styles.heroContent}>
-                <View style={styles.heroLogo}>
-                  <Text style={styles.heroLogoText}>ALABASTAR PRO</Text>
-                </View>
-                <Text style={styles.heroTitle}>Welcome Back, Provider!</Text>
-                <Text style={styles.heroSubtitle}>
-                  Manage your bookings, showcase your expertise, and grow with Alabastar.
-                </Text>
-              </View>
-            </ImageBackground>
-
-            <View style={styles.featuresContainer}>
-              {features.map((feature, index) => (
-                <View key={feature.label} style={styles.featureCard}>
-                  <View style={styles.featureIcon}>
-                    <feature.icon size={18} color="#ffffff" />
-                  </View>
-                  <Text style={styles.featureLabel}>{feature.label}</Text>
-                </View>
-              ))}
-            </View>
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <Image 
+              source={require('../../assets/logo.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.welcomeTitle}>Welcome Back, Provider!</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Sign in to manage your bookings and grow your business
+            </Text>
           </View>
 
           <View style={styles.formCard}>
@@ -229,95 +203,40 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     marginHorizontal: 20,
     marginTop: 12,
     marginBottom: 8,
   },
   backButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#0f172a',
   },
-  heroWrapper: {
-    marginHorizontal: 20,
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 12,
-  },
-  heroImage: {
-    height: 220,
-    justifyContent: 'flex-end',
-  },
-  heroImageStyle: {
-    resizeMode: 'cover',
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  },
-  heroContent: {
-    padding: 24,
-  },
-  heroLogo: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginBottom: 16,
-  },
-  heroLogoText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  heroTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  featuresContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  logoSection: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 32,
     paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: '#ffffff',
   },
-  featureCard: {
-    flex: 1,
-    marginHorizontal: 6,
-    backgroundColor: '#fdf2f8',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    gap: 10,
+  logoImage: {
+    width: 180,
+    height: 80,
+    marginBottom: 24,
   },
-  featureIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#ec4899',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  featureLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
     color: '#0f172a',
+    marginBottom: 8,
     textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 20,
   },
   formCard: {
     marginTop: 28,

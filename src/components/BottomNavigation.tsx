@@ -5,21 +5,29 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
-import { Home, Search, Calendar, MessageSquare, User } from 'lucide-react-native';
+import { Home, Calendar, MessageSquare, User, Wallet } from 'lucide-react-native';
 
 interface BottomNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  isProvider?: boolean;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabChange }) => {
-  const tabs = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'search', label: 'Services', icon: Search },
-    { id: 'bookings', label: 'Bookings', icon: Calendar },
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'profile', label: 'Profile', icon: User },
-  ];
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ activeTab, onTabChange, isProvider }) => {
+  const tabs = isProvider
+    ? [
+        { id: 'home', label: 'Home', icon: Home },
+        { id: 'bookings', label: 'Bookings', icon: Calendar },
+        { id: 'earnings', label: 'Earnings', icon: Wallet },
+        { id: 'messages', label: 'Messages', icon: MessageSquare },
+        { id: 'profile', label: 'Profile', icon: User },
+      ]
+    : [
+        { id: 'home', label: 'Home', icon: Home },
+        { id: 'bookings', label: 'Bookings', icon: Calendar },
+        { id: 'messages', label: 'Messages', icon: MessageSquare },
+        { id: 'profile', label: 'Profile', icon: User },
+      ];
 
   return (
     <View style={styles.container}>
