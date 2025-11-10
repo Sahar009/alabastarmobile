@@ -66,12 +66,22 @@ function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [messageRecipientId, setMessageRecipientId] = useState<string | null>(null);
   const [messageBookingId, setMessageBookingId] = useState<string | null>(null);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    checkFirstLaunch();
-    checkAuthState();
-    // Load saved location from AsyncStorage
-    loadSavedLocation();
+    const initialize = async () => {
+      try {
+        await Promise.all([
+          checkFirstLaunch(),
+          checkAuthState(),
+          loadSavedLocation(),
+        ]);
+      } finally {
+        setTimeout(() => setShowSplash(false), 1200);
+      }
+    };
+
+    initialize();
   }, []);
 
   const loadSavedLocation = async () => {
@@ -285,8 +295,7 @@ function App() {
     }
   };
 
-  if (isFirstLaunch === null) {
-    // Show loading screen or splash screen
+  if (showSplash || isFirstLaunch === null) {
     return (
       <SafeAreaProvider>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
