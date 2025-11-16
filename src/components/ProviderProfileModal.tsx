@@ -70,6 +70,8 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
 
     setLoading(true);
     try {
+      console.log('[ProviderProfileModal] Fetching provider details for:', provider.id);
+      
       // Get portfolio images from both brandImages and portfolio arrays (max 8)
       let images: string[] = [];
       
@@ -87,33 +89,150 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
       // Limit to 8 images
       setPortfolioImages(images.slice(0, 8));
 
-      // Mock reviews for now - can be replaced with API call
-      setReviews([
-        {
-          id: '1',
-          userName: 'Sarah Johnson',
-          rating: 5,
-          comment: 'Excellent work! Very professional and completed the job ahead of schedule. Highly recommended.',
-          date: '2 days ago',
-          service: 'Service',
-        },
-        {
-          id: '2',
-          userName: 'Michael Brown',
-          rating: 4,
-          comment: 'Good service, arrived on time and fixed the issue. Would use again.',
-          date: '1 week ago',
-        },
-        {
-          id: '3',
-          userName: 'Emily Davis',
-          rating: 5,
-          comment: 'Outstanding work! Very clean and professional. The quality exceeded my expectations.',
-          date: '2 weeks ago',
-        },
-      ]);
+      // Fetch real reviews from API - try provider profile endpoint first (includes reviews)
+      try {
+        const API_BASE_URL = 'https://alabastar-backend.onrender.com/api';
+        
+        // Try provider profile endpoint first (includes reviews)
+        const profileUrl = `${API_BASE_URL}/providers/profile/${provider.id}`;
+        console.log('[ProviderProfileModal] Fetching provider profile with reviews from:', profileUrl);
+        
+        let apiReviews = [];
+        let reviewsData = null;
+        
+        const profileResponse = await fetch(profileUrl);
+        
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          
+          console.log('[ProviderProfileModal] Provider profile API response:', {
+            success: profileData.success,
+            hasData: !!profileData.data,
+            hasReviews: !!profileData.data?.reviews,
+            reviewCount: profileData.data?.reviews?.length || 0,
+            fullDataStructure: Object.keys(profileData.data || {}),
+          });
+          
+          if (profileData.success && profileData.data) {
+            // Check if reviews are directly in data or nested
+            if (Array.isArray(profileData.data.reviews)) {
+              apiReviews = profileData.data.reviews;
+              console.log('[ProviderProfileModal] ✅ Got reviews from provider profile endpoint:', apiReviews.length);
+              console.log('[ProviderProfileModal] First review sample:', apiReviews[0] ? {
+                id: apiReviews[0].id,
+                rating: apiReviews[0].rating,
+                hasUser: !!apiReviews[0].User,
+                userFullName: apiReviews[0].User?.fullName,
+              } : 'No reviews');
+            } else {
+              console.warn('[ProviderProfileModal] ⚠️ Reviews not an array:', typeof profileData.data.reviews);
+            }
+          }
+        } else {
+          const errorText = await profileResponse.text();
+          console.warn('[ProviderProfileModal] ⚠️ Profile API request failed:', {
+            status: profileResponse.status,
+            statusText: profileResponse.statusText,
+            error: errorText.substring(0, 200),
+          });
+        }
+        
+        // Fallback to reviews endpoint if profile endpoint doesn't have reviews
+        if (apiReviews.length === 0) {
+          const reviewsUrl = `${API_BASE_URL}/reviews/provider/${provider.id}`;
+          console.log('[ProviderProfileModal] Falling back to reviews endpoint:', reviewsUrl);
+          
+          const reviewsResponse = await fetch(reviewsUrl);
+          
+          if (reviewsResponse.ok) {
+            reviewsData = await reviewsResponse.json();
+            
+            console.log('[ProviderProfileModal] Reviews API response:', {
+              success: reviewsData.success,
+              hasData: !!reviewsData.data,
+              reviewCount: reviewsData.data?.reviews?.length || 0,
+            });
+            
+            if (reviewsData.success && reviewsData.data?.reviews && Array.isArray(reviewsData.data.reviews)) {
+              apiReviews = reviewsData.data.reviews;
+              console.log('[ProviderProfileModal] ✅ Got reviews from reviews endpoint');
+            }
+          }
+        }
+        
+        if (apiReviews.length > 0) {
+            
+            // Transform API reviews to component format
+            const transformedReviews: Review[] = apiReviews.map((review: any) => {
+              // Format date
+              const reviewDate = review.createdAt 
+                ? new Date(review.createdAt)
+                : new Date();
+              
+              const now = new Date();
+              const diffInMs = now.getTime() - reviewDate.getTime();
+              const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+              const diffInWeeks = Math.floor(diffInDays / 7);
+              const diffInMonths = Math.floor(diffInDays / 30);
+              
+              let dateStr = '';
+              if (diffInDays === 0) {
+                dateStr = 'Today';
+              } else if (diffInDays === 1) {
+                dateStr = '1 day ago';
+              } else if (diffInDays < 7) {
+                dateStr = `${diffInDays} days ago`;
+              } else if (diffInWeeks === 1) {
+                dateStr = '1 week ago';
+              } else if (diffInWeeks < 4) {
+                dateStr = `${diffInWeeks} weeks ago`;
+              } else if (diffInMonths === 1) {
+                dateStr = '1 month ago';
+              } else if (diffInMonths < 12) {
+                dateStr = `${diffInMonths} months ago`;
+              } else {
+                dateStr = reviewDate.toLocaleDateString();
+              }
+              
+              return {
+                id: review.id || `review-${Math.random()}`,
+                userName: review.User?.fullName || review.user?.fullName || 'Anonymous',
+                userAvatar: review.User?.avatarUrl || review.user?.avatarUrl,
+                rating: review.rating || 0,
+                comment: review.comment || '',
+                date: dateStr,
+                service: review.booking?.serviceId || undefined,
+              };
+            });
+            
+            console.log('[ProviderProfileModal] ✅ Using REAL reviews from API:', {
+              count: transformedReviews.length,
+              reviews: transformedReviews.map(r => ({
+                id: r.id,
+                userName: r.userName,
+                rating: r.rating,
+                date: r.date,
+              })),
+            });
+            
+            setReviews(transformedReviews);
+          } else {
+            console.warn('[ProviderProfileModal] ⚠️ No reviews in API response, showing empty state');
+            setReviews([]);
+          }
+        } else {
+          console.warn('[ProviderProfileModal] ⚠️ Reviews API request failed:', {
+            status: reviewsResponse.status,
+            statusText: reviewsResponse.statusText,
+          });
+          setReviews([]);
+        }
+      } catch (error) {
+        console.error('[ProviderProfileModal] ❌ Error fetching reviews:', error);
+        setReviews([]);
+      }
     } catch (error) {
-      console.error('Error fetching provider details:', error);
+      console.error('[ProviderProfileModal] ❌ Error fetching provider details:', error);
     } finally {
       setLoading(false);
     }

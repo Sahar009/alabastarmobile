@@ -15,6 +15,7 @@ export interface Provider {
   subcategories: string[];
   locationCity: string;
   locationState: string;
+  serviceId?: string;
   ratingAverage: number;
   ratingCount: number;
   startingPrice: number;
@@ -95,6 +96,7 @@ class ProviderService {
       subcategories: subcategories,
       locationCity: provider.locationCity || '',
       locationState: provider.locationState || '',
+      serviceId: provider.serviceId,
       ratingAverage: provider.ratingAverage || 0,
       ratingCount: provider.ratingCount || 0,
       startingPrice: provider.startingPrice || 5000,

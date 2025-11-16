@@ -27,53 +27,75 @@ import {
   MessageCircle,
 } from 'lucide-react-native';
 import { apiService } from '../services/api';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 interface ProfileScreenProps {
   userData: any;
   onLogout: () => void;
   onNavigate?: (screen: string) => void;
+  onProfileUpdated?: (user: any) => void;
 }
+
+const resolveUser = (data: any) => {
+  if (!data) return null;
+  return data.user ? data.user : data;
+};
+
+const resolveCustomer = (data: any) => {
+  if (!data) return null;
+  return data.customer ? data.customer : data.user?.customer || null;
+};
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userData,
   onLogout,
   onNavigate,
+  onProfileUpdated,
 }) => {
+  const initialUser = resolveUser(userData);
+  const initialCustomer = resolveCustomer(userData);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   
   // Profile data
-  const [fullName, setFullName] = useState(userData?.user?.fullName || '');
-  const [phone, setPhone] = useState(userData?.user?.phone || '');
-  const [email, setEmail] = useState(userData?.user?.email || '');
-  const [avatarUrl, setAvatarUrl] = useState(userData?.user?.avatarUrl || null);
+  const [fullName, setFullName] = useState(initialUser?.fullName || '');
+  const [phone, setPhone] = useState(initialUser?.phone || '');
+  const [email, setEmail] = useState(initialUser?.email || '');
+  const [avatarUrl, setAvatarUrl] = useState(initialUser?.avatarUrl || null);
   
   // Customer profile data
-  const [customer, setCustomer] = useState<any>(null);
+  const [customer, setCustomer] = useState<any>(initialCustomer);
   const [notificationSettings, setNotificationSettings] = useState({
-    email: true,
-    sms: true,
-    push: true,
+    email: initialCustomer?.notificationSettings?.email ?? true,
+    sms: initialCustomer?.notificationSettings?.sms ?? true,
+    push: initialCustomer?.notificationSettings?.push ?? true,
   });
 
   useEffect(() => {
-    if (userData) {
-      setFullName(userData.user?.fullName || '');
-      setPhone(userData.user?.phone || '');
-      setEmail(userData.user?.email || '');
-      setAvatarUrl(userData.user?.avatarUrl || null);
-      
-      if (userData.customer) {
-        setCustomer(userData.customer);
-        setNotificationSettings(
-          userData.customer.notificationSettings || {
-            email: true,
-            sms: true,
-            push: true,
-          }
-        );
-      }
+    if (!userData) {
+      return;
+    }
+    const resolvedUser = resolveUser(userData);
+    const resolvedCustomer = resolveCustomer(userData);
+
+    setFullName(resolvedUser?.fullName || '');
+    setPhone(resolvedUser?.phone || '');
+    setEmail(resolvedUser?.email || '');
+    setAvatarUrl(resolvedUser?.avatarUrl || null);
+
+    if (resolvedCustomer) {
+      setCustomer(resolvedCustomer);
+      setNotificationSettings(
+        resolvedCustomer.notificationSettings || {
+          email: true,
+          sms: true,
+          push: true,
+        },
+      );
+    } else {
+      setCustomer(null);
     }
   }, [userData]);
 
@@ -89,6 +111,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       if (response.success) {
         Alert.alert('Success', 'Profile updated successfully');
         setEditing(false);
+
+        const updatedUser = {
+          ...resolveUser(userData),
+          fullName,
+          phone,
+        };
+        await apiService.setUser(updatedUser);
+        onProfileUpdated?.(updatedUser);
       } else {
         Alert.alert('Error', response.message || 'Failed to update profile');
       }
@@ -101,17 +131,85 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   const handleCancel = () => {
-    setFullName(userData?.user?.fullName || '');
-    setPhone(userData?.user?.phone || '');
+    const resolvedUser = resolveUser(userData);
+    setFullName(resolvedUser?.fullName || '');
+    setPhone(resolvedUser?.phone || '');
     setEditing(false);
   };
 
-  const handleImagePicker = () => {
-    Alert.alert(
-      'Profile Picture',
-      'Profile picture upload is not available at this time.',
-      [{ text: 'OK' }]
-    );
+  const handleImagePicker = async () => {
+    if (uploadingAvatar) {
+      return;
+    }
+
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 1,
+        quality: 0.8,
+      });
+
+      if (result.didCancel) {
+        return;
+      }
+
+      if (result.errorCode) {
+        throw new Error(result.errorMessage || 'Unable to select image');
+      }
+
+      const asset = result.assets?.[0];
+
+      if (!asset?.uri) {
+        throw new Error('No image selected');
+      }
+
+      const fileName = asset.fileName || `avatar-${Date.now()}.jpg`;
+      const fileType = asset.type || 'image/jpeg';
+      const fileUri = asset.uri;
+
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: fileUri,
+        name: fileName,
+        type: fileType,
+      } as any);
+
+      setUploadingAvatar(true);
+
+      const response = await apiService.uploadProfilePicture(formData);
+
+      if (response.success) {
+        const newAvatarUrl =
+          response.data?.avatarUrl ||
+          response.data?.user?.avatarUrl ||
+          asset.uri;
+
+        if (newAvatarUrl) {
+          setAvatarUrl(newAvatarUrl);
+        }
+
+        const updatedUser =
+          response.data?.user ||
+          {
+            ...resolveUser(userData),
+            avatarUrl: newAvatarUrl,
+          };
+
+        if (updatedUser) {
+          await apiService.setUser(updatedUser);
+          onProfileUpdated?.(updatedUser);
+        }
+
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } else {
+        Alert.alert('Error', response.message || 'Failed to upload profile picture');
+      }
+    } catch (error: any) {
+      console.error('Profile picture upload error:', error);
+      Alert.alert('Error', error.message || 'Failed to upload profile picture');
+    } finally {
+      setUploadingAvatar(false);
+    }
   };
 
 
@@ -251,7 +349,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <TouchableOpacity
             style={styles.avatarContainer}
             onPress={handleImagePicker}
-            disabled={!editing}
+            disabled={!editing || uploadingAvatar}
           >
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatar} />
@@ -260,10 +358,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <User size={48} color="#ec4899" />
               </View>
             )}
+            {(uploadingAvatar) && (
+              <View style={styles.avatarOverlay}>
+                <ActivityIndicator size="small" color="#ffffff" />
+              </View>
+            )}
           </TouchableOpacity>
 
-          <Text style={styles.userName}>{fullName}</Text>
-          <Text style={styles.userEmail}>{email}</Text>
+          <Text style={styles.userName}>{fullName || 'Guest User'}</Text>
+          <Text style={styles.userEmail}>{email || 'No email provided'}</Text>
 
           <View style={styles.statusBadge}>
             <Shield size={14} color="#10b981" />
@@ -457,6 +560,17 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: '#f1f5f9',
+  },
+  avatarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 50,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   avatarPlaceholder: {
     width: 100,

@@ -20,8 +20,8 @@ const { height } = Dimensions.get('window');
 interface SignUpScreenProps {
   onSignUp: (userData: SignUpData) => Promise<void>;
   onLogin: () => void;
-  onBackToUserTypeSelection: () => void;
   onGoogleSignUp: () => void;
+  onSwitchToProvider: () => void;
   isGoogleLoading?: boolean;
 }
 
@@ -36,8 +36,8 @@ interface SignUpData {
 const SignUpScreen: React.FC<SignUpScreenProps> = ({
   onSignUp,
   onLogin,
-  onBackToUserTypeSelection,
   onGoogleSignUp,
+  onSwitchToProvider,
   isGoogleLoading = false,
 }) => {
   const [formData, setFormData] = useState<SignUpData>({
@@ -111,8 +111,16 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({
   };
 
   const isValidPhoneNumber = (phone: string) => {
-    const phoneRegex = /^[+]?[1-9][\d]{0,15}$/;
-    return phoneRegex.test(phone.replace(/\s/g, ''));
+    // Remove all spaces and dashes
+    const cleanPhone = phone.replace(/[\s-]/g, '');
+    
+    // Accept Nigerian phone number formats:
+    // - Starting with 0 (e.g., 09101128282)
+    // - Starting with +234 (e.g., +2349101128282)
+    // - Starting with 234 (e.g., 2349101128282)
+    const nigerianPhoneRegex = /^(\+?234|0)?[789][01]\d{8}$/;
+    
+    return nigerianPhoneRegex.test(cleanPhone);
   };
 
   return (
@@ -135,16 +143,15 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={onBackToUserTypeSelection}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>
               Join Alabastar and start booking trusted services
+            </Text>
+            <Text style={styles.providerPrompt}>
+              Are you a provider or want to be a provider?{' '}
+              <Text style={styles.providerLink} onPress={onSwitchToProvider}>
+                Click here
+              </Text>
             </Text>
           </View>
 
@@ -361,21 +368,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     marginTop: 10,
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 16,
-  },
-  backButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -389,6 +381,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
     lineHeight: 20,
+  },
+  providerPrompt: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  providerLink: {
+    color: '#ec4899',
+    fontWeight: '600',
   },
   form: {
     marginBottom: 20,

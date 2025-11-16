@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -105,6 +106,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [featureLimits, setFeatureLimits] = useState<any>(null);
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   const loadCategories = useCallback(async () => {
     try {
@@ -246,6 +248,28 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
   }, []);
 
   useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [skeletonPulse]);
+
+  useEffect(() => {
     loadCategories();
     loadProfile();
   }, [loadCategories, loadProfile]);
@@ -261,6 +285,49 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     if (!originalProfile) return false;
     return JSON.stringify(profile) !== JSON.stringify(originalProfile);
   }, [profile, originalProfile]);
+
+  const skeletonOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 1],
+  });
+
+  const renderSkeletonCard = (_: any, index: number) => (
+    <View key={index} style={styles.skeletonCard}>
+      <Animated.View style={[styles.skeletonLineWide, { opacity: skeletonOpacity }]} />
+      <Animated.View style={[styles.skeletonLineShort, { opacity: skeletonOpacity }]} />
+      <Animated.View style={[styles.skeletonSpacer, { opacity: skeletonOpacity }]} />
+      <View style={styles.skeletonRow}>
+        <Animated.View style={[styles.skeletonChip, { opacity: skeletonOpacity }]} />
+        <Animated.View style={[styles.skeletonChipHalf, { opacity: skeletonOpacity }]} />
+      </View>
+    </View>
+  );
+
+  const selectedCategoryLabel = useMemo(() => {
+    return categories.find((cat) => cat.value === profile.category)?.label || 'Select a category';
+  }, [categories, profile.category]);
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.headerBar}>
+          <Animated.View style={[styles.skeletonHeaderButton, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonHeaderTitle, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonHeaderButton, { opacity: skeletonOpacity }]} />
+        </View>
+
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {Array.from({ length: 4 }).map(renderSkeletonCard)}
+          <View style={styles.skeletonPortfolioWrapper}>
+            {Array.from({ length: 6 }).map((__, idx) => (
+              <Animated.View key={idx} style={[styles.skeletonPortfolioItem, { opacity: skeletonOpacity }]} />
+            ))}
+          </View>
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   const handleSave = async () => {
     if (!hasChanges) {
@@ -682,10 +749,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       setEditing(true);
     }
   };
-
-  const selectedCategoryLabel = useMemo(() => {
-    return categories.find((cat) => cat.value === profile.category)?.label || 'Select a category';
-  }, [categories, profile.category]);
 
   const renderVerificationBadge = () => {
     const status = (verificationStatus || '').toLowerCase();
@@ -1121,12 +1184,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ec4899" />
-        </View>
-      )}
-
       {/* Image Editing Modal */}
       <Modal
         visible={showImageModal}
@@ -1515,6 +1572,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
+  },
+  skeletonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  skeletonLineWide: {
+    height: 18,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  skeletonLineShort: {
+    height: 12,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    width: '60%',
+  },
+  skeletonSpacer: {
+    height: 20,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  skeletonChip: {
+    flex: 1,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonChipHalf: {
+    flex: 0.6,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonPortfolioWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  skeletonPortfolioItem: {
+    width: '30%',
+    aspectRatio: 1,
+    borderRadius: 16,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonHeaderButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonHeaderTitle: {
+    flex: 1,
+    height: 18,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+    marginHorizontal: 20,
   },
   headerRight: {
     flexDirection: 'row',

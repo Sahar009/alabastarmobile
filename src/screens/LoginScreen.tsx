@@ -21,8 +21,8 @@ interface LoginScreenProps {
   onLogin: (email: string, password: string) => Promise<void>;
   onSignUp: () => void;
   onForgotPassword: () => void;
-  onBackToUserTypeSelection: () => void;
   onGoogleSignIn: () => void;
+  onSwitchToProvider: () => void;
   isGoogleLoading?: boolean;
 }
 
@@ -30,8 +30,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   onLogin, 
   onSignUp, 
   onForgotPassword,
-  onBackToUserTypeSelection,
   onGoogleSignIn,
+  onSwitchToProvider,
   isGoogleLoading = false,
 }) => {
   const [email, setEmail] = useState('');
@@ -85,16 +85,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         >
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={onBackToUserTypeSelection}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
             <Text style={styles.title}>Welcome Back!</Text>
             <Text style={styles.subtitle}>
               Sign in to continue your journey with Alabastar
+            </Text>
+            <Text style={styles.providerPrompt}>
+              Are you a provider or want to be a provider?{' '}
+              <Text style={styles.providerLink} onPress={onSwitchToProvider}>
+                Click here
+              </Text>
             </Text>
           </View>
 
@@ -250,21 +249,6 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     marginTop: 10,
   },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    marginBottom: 16,
-  },
-  backButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -278,6 +262,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
     lineHeight: 20,
+  },
+  providerPrompt: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  providerLink: {
+    color: '#ec4899',
+    fontWeight: '600',
   },
   form: {
     marginBottom: 20,

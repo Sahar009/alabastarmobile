@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +10,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -24,6 +25,7 @@ import {
   MessageCircle,
   ChevronRight,
   RefreshCcw,
+  MessageSquare,
 } from 'lucide-react-native';
 import { apiService } from '../services/api';
 
@@ -95,6 +97,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
   const [timelineVisible, setTimelineVisible] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<ProviderBooking | null>(null);
   const [actionInFlight, setActionInFlight] = useState(false);
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   const fetchBookings = useCallback(async () => {
     try {
@@ -116,9 +119,10 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
 
       if (filter !== 'all') {
         // Map filter values to backend statuses
+        // Backend uses: 'requested', 'accepted', 'in_progress', 'completed', 'cancelled'
         const statusMap: Record<string, string> = {
-          'pending': 'pending',
-          'confirmed': 'confirmed',
+          'pending': 'requested', // 'pending' in UI maps to 'requested' in backend
+          'confirmed': 'accepted', // 'confirmed' in UI maps to 'accepted' in backend
           'completed': 'completed',
           'cancelled': 'cancelled',
         };
@@ -127,24 +131,40 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
 
       const response = await apiService.getMyBookings(queryParams);
 
-      console.log('🔍 Provider Bookings API Response:', JSON.stringify(response, null, 2));
-
       if (response.success) {
-        // Backend returns: { success: true, data: { bookings: [...], pagination: {...} } }
-        // Frontend accesses: data.bookings directly from response.json()
-        // Mobile apiService.request returns: { success: true, data: { bookings: [...] } }
+        // Backend returns: { success: true, message: "...", data: { bookings: [...], pagination: {...} } }
+        // apiService.request already parses the JSON, so response.data is the data object from backend
         let extractedBookings: any[] = [];
         
+        // Handle different response structures
         if (Array.isArray(response.data)) {
+          // If data is directly an array
           extractedBookings = response.data;
         } else if (response.data?.bookings && Array.isArray(response.data.bookings)) {
+          // If data has a bookings property (correct structure)
           extractedBookings = response.data.bookings;
         } else if ((response as any).bookings && Array.isArray((response as any).bookings)) {
+          // Fallback: if bookings is at root level
           extractedBookings = (response as any).bookings;
         }
         
-        console.log('📦 Extracted bookings:', extractedBookings.length);
+        console.log(`[ProviderBookingsScreen] Extracted ${extractedBookings.length} bookings from response`);
+        console.log(`[ProviderBookingsScreen] Response structure:`, {
+          hasData: !!response.data,
+          dataIsArray: Array.isArray(response.data),
+          hasDataBookings: !!(response.data as any)?.bookings,
+          bookingsCount: extractedBookings.length
+        });
+        
         setBookings(extractedBookings);
+        
+        // Show helpful message if no bookings but provider profile might not exist
+        if (extractedBookings.length === 0 && response.message?.includes('provider profile')) {
+          Alert.alert(
+            'No Bookings',
+            response.message || 'Please complete your provider registration to receive bookings.'
+          );
+        }
       } else {
         Alert.alert('Bookings', response.message || 'Unable to load bookings');
       }
@@ -165,6 +185,51 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
     };
     initializeToken();
   }, [fetchBookings]);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [skeletonPulse]);
+
+  const skeletonOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 1],
+  });
+
+  const showSkeleton = loading && bookings.length === 0;
+
+  const renderSkeletonBookings = () => (
+    <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <View key={`booking-skeleton-${index}`} style={[styles.bookingCard, styles.skeletonCard]}> 
+          <Animated.View style={[styles.skeletonLineWide, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonLineShorter, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonLineMedium, { opacity: skeletonOpacity }]} />
+          <View style={styles.skeletonRow}>
+            <Animated.View style={[styles.skeletonChipWide, { opacity: skeletonOpacity }]} />
+            <Animated.View style={[styles.skeletonChip, { opacity: skeletonOpacity }]} />
+          </View>
+          <Animated.View style={[styles.skeletonBox, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonLineShort, { opacity: skeletonOpacity }]} />
+        </View>
+      ))}
+    </ScrollView>
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -241,6 +306,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
   const buildTimeline = useCallback((booking?: ProviderBooking | null): BookingTimelineEntry[] => {
     if (!booking) return [];
 
+    // If backend provides timeline or statusHistory, use it
     if (Array.isArray(booking.timeline) && booking.timeline.length) {
       return booking.timeline.map(item => ({ ...item, status: item.status || item.note || 'update' }));
     }
@@ -249,35 +315,96 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
       return booking.statusHistory;
     }
 
+    // Build timeline from booking data
     const entries: BookingTimelineEntry[] = [];
+    const currentStatus = (booking.status || '').toLowerCase();
+    const createdAt = booking.createdAt;
+    const updatedAt = booking.updatedAt;
 
-    if (booking.createdAt) {
-      entries.push({ status: 'requested', timestamp: booking.createdAt, note: 'Booking requested' });
+    // Always show when booking was created
+    if (createdAt) {
+      entries.push({ 
+        status: 'requested', 
+        timestamp: createdAt, 
+        note: 'Booking requested by customer' 
+      });
     }
 
-    if (booking.acceptedAt) {
-      entries.push({ status: 'accepted', timestamp: booking.acceptedAt, note: 'Booking accepted' });
+    // Show status changes based on current status
+    // If status changed from requested, show when it was accepted
+    if (currentStatus === 'accepted' || currentStatus === 'confirmed') {
+      // If we have a specific acceptedAt timestamp, use it, otherwise use updatedAt
+      const acceptedTimestamp = booking.acceptedAt || updatedAt || createdAt;
+      if (acceptedTimestamp && acceptedTimestamp !== createdAt) {
+        entries.push({ 
+          status: 'accepted', 
+          timestamp: acceptedTimestamp, 
+          note: 'Booking accepted by provider' 
+        });
+      } else if (createdAt) {
+        // If no separate timestamp, just show it was accepted
+        entries.push({ 
+          status: 'accepted', 
+          timestamp: createdAt, 
+          note: 'Booking accepted by provider' 
+        });
+      }
     }
 
-    if (booking.startedAt || booking.inProgressAt) {
-      entries.push({ status: 'in_progress', timestamp: (booking.startedAt || booking.inProgressAt) as string, note: 'Work in progress' });
+    // If status is in_progress, show when work started
+    if (currentStatus === 'in_progress') {
+      const inProgressTimestamp = booking.startedAt || booking.inProgressAt || updatedAt;
+      if (inProgressTimestamp) {
+        entries.push({ 
+          status: 'in_progress', 
+          timestamp: inProgressTimestamp, 
+          note: 'Work started by provider' 
+        });
+      }
     }
 
-    if (booking.completedAt) {
-      entries.push({ status: 'completed', timestamp: booking.completedAt, note: 'Booking completed' });
+    // If status is completed, show completion
+    if (currentStatus === 'completed') {
+      const completedTimestamp = booking.completedAt || updatedAt;
+      if (completedTimestamp) {
+        entries.push({ 
+          status: 'completed', 
+          timestamp: completedTimestamp, 
+          note: 'Booking completed successfully' 
+        });
+      }
     }
 
-    if (!entries.length && booking.updatedAt) {
+    // If status is cancelled, show cancellation
+    if (currentStatus === 'cancelled' || currentStatus === 'declined' || currentStatus === 'rejected') {
+      const cancelledTimestamp = updatedAt || createdAt;
+      if (cancelledTimestamp && cancelledTimestamp !== createdAt) {
+        entries.push({ 
+          status: 'cancelled', 
+          timestamp: cancelledTimestamp, 
+          note: currentStatus === 'declined' || currentStatus === 'rejected' 
+            ? 'Booking declined by provider' 
+            : 'Booking cancelled' 
+        });
+      }
+    }
+
+    // If no entries were created, create a basic one with current status
+    if (entries.length === 0) {
       const status = booking.status || 'unknown';
-      entries.push({ status: status, timestamp: booking.updatedAt, note: `Status set to ${statusLabel(status)}` });
+      entries.push({ 
+        status: status, 
+        timestamp: createdAt || updatedAt || new Date().toISOString(), 
+        note: `Booking status: ${statusLabel(status)}` 
+      });
     }
 
-    if (!entries.length) {
-      const status = booking.status || 'unknown';
-      entries.push({ status: status, timestamp: booking.createdAt || new Date().toISOString(), note: statusLabel(status) });
-    }
-
-    return entries;
+    // Sort entries by timestamp (oldest first)
+    return entries.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
   }, [statusLabel]);
 
   const performStatusUpdate = async (
@@ -341,7 +468,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
         {
           text: 'Yes, Accept',
           style: 'default',
-          onPress: () => performStatusUpdate(booking.id, 'confirmed', 'Booking accepted successfully', 'accepted'),
+          onPress: () => performStatusUpdate(booking.id, 'accepted', 'Booking accepted successfully'),
         },
       ],
     );
@@ -356,7 +483,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
         {
           text: 'Yes, Decline',
           style: 'destructive',
-          onPress: () => performStatusUpdate(booking.id, 'cancelled', 'Booking declined successfully', 'declined'),
+          onPress: () => performStatusUpdate(booking.id, 'cancelled', 'Booking declined successfully'),
         },
       ],
     );
@@ -404,6 +531,35 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
     });
   };
 
+  const openWhatsApp = (phone?: string) => {
+    if (!phone) {
+      Alert.alert('WhatsApp', 'No phone number available for this customer yet.');
+      return;
+    }
+
+    // Remove all non-digit characters except +
+    let sanitized = phone.replace(/[\s()-]/g, '');
+    
+    // Convert to international format if not already
+    if (sanitized.startsWith('0')) {
+      // Nigerian number starting with 0, replace with +234
+      sanitized = `+234${sanitized.substring(1)}`;
+    } else if (sanitized.startsWith('234')) {
+      sanitized = `+${sanitized}`;
+    } else if (!sanitized.startsWith('+')) {
+      sanitized = `+${sanitized}`;
+    }
+
+    // Remove + for WhatsApp URL
+    const whatsappNumber = sanitized.replace(/^\+/, '');
+    const whatsappUrl = `https://wa.me/${whatsappNumber}`;
+    
+    Linking.openURL(whatsappUrl).catch(error => {
+      console.error('WhatsApp error:', error);
+      Alert.alert('WhatsApp Failed', 'Unable to open WhatsApp. Please make sure WhatsApp is installed.');
+    });
+  };
+
   const renderActionButtons = (booking: ProviderBooking) => {
     const currentStatus = (booking.status || '').toLowerCase();
 
@@ -435,13 +591,6 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
       case 'confirmed':
         return (
           <View style={styles.actionsRow}>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.completeButton]} 
-              onPress={() => handleComplete(booking)}
-            >
-              <CheckCircle2 size={16} color="#ffffff" />
-              <Text style={styles.actionButtonText}>Mark Complete</Text>
-            </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.actionButton, styles.rejectButton]} 
               onPress={() => handleCancel(booking)}
@@ -516,12 +665,20 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
           </View>
           <View style={styles.contactButtons}>
             {booking.customer?.phone ? (
-              <TouchableOpacity
-                style={[styles.contactButton, styles.callButton]}
-                onPress={() => dialCustomer(booking.customer?.phone)}
-              >
-                <PhoneCall size={16} color="#ffffff" />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.contactButton, styles.callButton]}
+                  onPress={() => dialCustomer(booking.customer?.phone)}
+                >
+                  <PhoneCall size={16} color="#ffffff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.contactButton, styles.whatsappButton]}
+                  onPress={() => openWhatsApp(booking.customer?.phone)}
+                >
+                  <MessageSquare size={16} color="#ffffff" />
+                </TouchableOpacity>
+              </>
             ) : null}
             {booking.customer?.id ? (
               <TouchableOpacity
@@ -602,7 +759,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
           </View>
         </ScrollView>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
           {FILTERS.map(item => (
             <TouchableOpacity
               key={item.value}
@@ -616,28 +773,28 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
           ))}
         </ScrollView>
 
-        <ScrollView
-          style={styles.listContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          showsVerticalScrollIndicator={false}
-        >
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#ec4899" />
-              <Text style={styles.loadingText}>Loading bookings…</Text>
-            </View>
-          ) : bookings.length === 0 ? (
-            <View style={styles.emptyState}>
-              <TriangleAlert size={48} color="#cbd5f5" />
-              <Text style={styles.emptyStateTitle}>No bookings in this state</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                When customers request your services, their bookings will show up here for you to manage.
-              </Text>
-            </View>
-          ) : (
-            bookings.map(renderBookingCard)
-          )}
-        </ScrollView>
+        {showSkeleton ? (
+          renderSkeletonBookings()
+        ) : (
+          <ScrollView
+            style={styles.listContainer}
+            contentContainerStyle={styles.listContainerContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            showsVerticalScrollIndicator={false}
+          >
+            {bookings.length === 0 ? (
+              <View style={styles.emptyState}>
+                <TriangleAlert size={48} color="#cbd5f5" />
+                <Text style={styles.emptyStateTitle}>No bookings in this state</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  When customers request your services, their bookings will show up here for you to manage.
+                </Text>
+              </View>
+            ) : (
+              bookings.map(renderBookingCard)
+            )}
+          </ScrollView>
+        )}
 
         <Modal visible={timelineVisible} animationType="slide" transparent onRequestClose={() => setTimelineVisible(false)}>
           <View style={styles.modalBackdrop}>
@@ -735,7 +892,7 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     maxHeight: 110,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   statsRowContent: {
     paddingHorizontal: 4,
@@ -801,7 +958,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   filterRow: {
-    marginVertical: 8,
+    marginTop: 10,
+    marginBottom: 12,
+    maxHeight: 32,
+   height: 32,
+  },
+  filterRowContent: {
+    paddingBottom: 0,
+    paddingTop: 0,
+    paddingVertical: 0,
+    alignItems: 'center',
   },
   filterChip: {
     paddingHorizontal: 12,
@@ -831,7 +997,10 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     flex: 1,
-    marginTop: 4,
+    marginTop: 0,
+  },
+  listContainerContent: {
+    paddingTop: 0,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -965,6 +1134,9 @@ const styles = StyleSheet.create({
   },
   callButton: {
     backgroundColor: '#ec4899',
+  },
+  whatsappButton: {
+    backgroundColor: '#25D366',
   },
   messageButton: {
     backgroundColor: '#eff6ff',
@@ -1132,6 +1304,60 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  skeletonCard: {
+    borderColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
+  },
+  skeletonLineWide: {
+    height: 18,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  skeletonLineMedium: {
+    height: 14,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 16,
+    width: '70%',
+  },
+  skeletonLineShort: {
+    height: 12,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 12,
+    width: '40%',
+  },
+  skeletonLineShorter: {
+    height: 12,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 12,
+    width: '30%',
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  skeletonChip: {
+    flex: 1,
+    height: 10,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonChipWide: {
+    flex: 1.2,
+    height: 10,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonBox: {
+    height: 64,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 12,
   },
 });
 

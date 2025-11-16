@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   Image,
   RefreshControl,
   TextInput,
   FlatList,
   Alert,
+  Animated,
+  ImageSourcePropType,
+  AppState,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Search, 
@@ -38,14 +39,13 @@ import {
   Flower,
   Box,
   Lock,
-  Zap
+  Zap,
+  ArrowRight,
 } from 'lucide-react-native';
 import ProviderProfileModal from '../components/ProviderProfileModal';
 import BookingModal from '../components/BookingModal';
 import { type Provider as ProviderType } from '../services/providerService';
-import { API_BASE_URL } from '../services/api';
-
-const { height, width } = Dimensions.get('window');
+import { API_BASE_URL, apiService } from '../services/api';
 
 interface HomeScreenProps {
   onCategorySelect: (category: string, search?: string) => void;
@@ -87,24 +87,34 @@ interface FeaturedService {
   };
 }
 
+// Helper function to resolve user data structure
+const resolveUser = (data: any) => {
+  if (!data) return null;
+  return data.user ? data.user : data;
+};
+
 const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, selectedLocation = 'Lagos', onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<Array<{id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string}>>([]);
   const [allCategories, setAllCategories] = useState<Array<{id: string; name: string; subcategories?: string[]}>>([]);
   const [featuredServices, setFeaturedServices] = useState<FeaturedService[]>([]);
+  const [topRatedServices, setTopRatedServices] = useState<FeaturedService[]>([]);
   const [isLoadingFeatured, setIsLoadingFeatured] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [categories, setCategories] = useState<Array<{
-    id: string;
-    name: string;
-    icon: any;
-    iconImage?: any;
-    color: string;
-    image: string;
-    description: string;
-  }>>([]);
+  const [adImages, setAdImages] = useState<ImageSourcePropType[]>([]);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  
+  // Resolve user data to get name - updates when userData changes
+  const userName = useMemo(() => {
+    const user = resolveUser(userData);
+    return user?.fullName || 'User';
+  }, [userData]);
+  const [isLoadingAds, setIsLoadingAds] = useState(false);
+  const adFadeAnim = useRef(new Animated.Value(0)).current;
+  const skeletonPulse = useRef(new Animated.Value(0.5));
   const [popularServices, setPopularServices] = useState<Array<{
     name: string;
     category: string;
@@ -143,10 +153,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         electrical: require('../../assets/mechanic2d.png'),
         cleaning: require('../../assets/cleaner2d.png'),
         moving: require('../../assets/mover2d.png'),
-        ac_repair: require('../../assets/ac2d.png'),
+        ac_repair: require('../../assets/ac2d.jpg'),
         carpentry: require('../../assets/carpenter2d.png'),
-        painting: require('../../assets/painter2d.png'),
-        pest_control: require('../../assets/electrician2d.png'),
+        painting: require('../../assets/painter2d.jpg'),
+        pest_control: require('../../assets/electrician2d.jpg'),
         laundry: require('../../assets/laundry2d.png'),
         pharmaceutical: require('../../assets/pharmacy2d.png'),
         cctv: require('../../assets/cctv2d.png'),
@@ -186,15 +196,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       if (data.success && data.data?.providers && Array.isArray(data.data.providers)) {
         console.log('Raw providers from API:', data.data.providers.length);
         
-        // Filter to only show providers with isTopListed: true
-        const topListedProviders = data.data.providers.filter((provider: any) => 
-          provider.isTopListed === true
-        );
-        
-        console.log('Top listed providers:', topListedProviders.length);
-        
         // Map providers to FeaturedService format
-        const services: FeaturedService[] = topListedProviders.map((provider: any) => {
+        const mappedProviders: FeaturedService[] = data.data.providers.map((provider: any) => {
           // Extract brandImages from portfolio.brandImages (nested structure)
           let brandImages: string[] = [];
           
@@ -265,18 +268,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
           };
         });
         
-        console.log('Processed featured services:', services.length);
-        console.log('First service:', services[0]?.businessName);
+        console.log('Processed providers:', mappedProviders.length);
+        console.log('First provider:', mappedProviders[0]?.businessName);
         
-        setFeaturedServices(services);
+        const featured = mappedProviders.filter(service => service.isTopListed);
+        console.log('Top listed providers:', featured.length);
+        setFeaturedServices(featured);
+
+        const topRated = [...mappedProviders]
+          .sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0))
+          .slice(0, 15);
+        setTopRatedServices(topRated);
       } else {
         console.warn('No providers found in API response');
         console.warn('Response data:', JSON.stringify(data, null, 2));
         setFeaturedServices([]);
+        setTopRatedServices([]);
       }
     } catch (error) {
       console.error('Error fetching featured services:', error);
       setFeaturedServices([]);
+      setTopRatedServices([]);
     } finally {
       setIsLoadingFeatured(false);
     }
@@ -458,8 +470,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         }));
         setPopularServices(popular);
         
-        // Limit to first 14 categories
-        setCategories(apiCategories.slice(0, 14));
       } else {
         // Fallback to hardcoded categories with iconImage
         const categoriesWithImages = hardcodedCategories.map((cat: any) => ({
@@ -483,7 +493,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         }));
         setPopularServices(popular);
         
-        setCategories(categoriesWithImages.slice(0, 14));
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -509,9 +518,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       }));
       setPopularServices(popular);
       
-      setCategories(categoriesWithImages.slice(0, 14));
     }
   }, [categoryIcons, categoryImages, hardcodedCategories]);
+  
+  const popularAccentPalettes = useMemo(() => [
+    { base: '#ec4899', tint: 'rgba(236,72,153,0.12)', glow: 'rgba(236,72,153,0.25)' },
+    { base: '#f97316', tint: 'rgba(249,115,22,0.12)', glow: 'rgba(249,115,22,0.25)' },
+    { base: '#3b82f6', tint: 'rgba(59,130,246,0.12)', glow: 'rgba(59,130,246,0.25)' },
+    { base: '#10b981', tint: 'rgba(16,185,129,0.12)', glow: 'rgba(16,185,129,0.25)' },
+  ], []);
   
   // Generate search suggestions based on query
   const generateSuggestions = useCallback((query: string) => {
@@ -586,46 +601,146 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     fetchFeaturedServices();
   }, [fetchFeaturedServices]);
 
-  // Fetch unread notification count
   useEffect(() => {
-    const fetchUnreadCount = async () => {
+    const fetchAds = async () => {
+      setIsLoadingAds(true);
       try {
-        const base = 'http://localhost:8000';
-        const token = await AsyncStorage.getItem('token');
-        if (!token) return;
+        // TODO: Replace with actual API call once endpoint is available
+        // const response = await fetch(`${API_BASE_URL}/ads/home`);
+        // const data = await response.json();
+        // if (data.success && Array.isArray(data.data)) {
+        //   setAdImages(data.data);
+        // } else {
+        //   setAdImages([]);
+        // }
 
-        const response = await fetch(`${base}/api/notifications/unread-count`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setUnreadCount(data.data?.unreadCount || 0);
-        }
+        setAdImages([
+          require('../../assets/slider1.png'),
+          require('../../assets/slider2.png'),
+        ]);
       } catch (error) {
-        console.error('Error fetching unread count:', error);
+        console.error('Error fetching ads:', error);
+        setAdImages([]);
+      } finally {
+        setIsLoadingAds(false);
       }
     };
 
+    fetchAds();
+  }, []);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse.current, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse.current, {
+          toValue: 0.4,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, []);
+
+  useEffect(() => {
+    if (adImages.length === 0) {
+      setCurrentAdIndex(0);
+      return;
+    }
+    setCurrentAdIndex(0);
+  }, [adImages]);
+
+  useEffect(() => {
+    if (adImages.length <= 1) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setCurrentAdIndex((prev) => (prev + 1) % adImages.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [adImages]);
+
+  useEffect(() => {
+    if (adImages.length === 0) {
+      return;
+    }
+    adFadeAnim.setValue(0);
+    Animated.timing(adFadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [currentAdIndex, adImages, adFadeAnim]);
+
+  const renderSkeletonCards = useCallback(
+    (count: number, prefix: string) =>
+      Array.from({ length: count }).map((_, idx) => (
+        <View key={`${prefix}-${idx}`} style={[styles.featuredCard, styles.skeletonCard]}>
+          <Animated.View style={[styles.skeletonOverlay, { opacity: skeletonPulse.current }]} />
+        </View>
+      )),
+    [],
+  );
+
+  // Fetch unread notification count
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      // Use apiService which automatically loads token if missing
+      await apiService.loadToken();
+      const response: any = await apiService.getUnreadNotificationCount();
+      
+      // Backend returns { success: true, count: number }
+      if (response.success) {
+        // Check both response.count (backend format) and response.data.unreadCount (alternative format) for compatibility
+        const count = response.count ?? response.data?.unreadCount ?? 0;
+        setUnreadCount(count);
+        console.log('Unread notification count:', count);
+      } else {
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+      setUnreadCount(0);
+      // Don't show error to user, just log it
+    }
+  }, []);
+
+  useEffect(() => {
     if (userData) {
       fetchUnreadCount();
+      // Refresh unread count periodically (every 30 seconds)
+      const interval = setInterval(fetchUnreadCount, 30000);
+      
+      // Refresh when app comes to foreground
+      const subscription = AppState.addEventListener('change', (nextAppState) => {
+        if (nextAppState === 'active') {
+          fetchUnreadCount();
+        }
+      });
+      
+      return () => {
+        clearInterval(interval);
+        subscription.remove();
+      };
     }
-  }, [userData]);
+  }, [userData, fetchUnreadCount]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await Promise.all([
         fetchFeaturedServices(),
-        fetchCategories()
+        fetchCategories(),
+        fetchUnreadCount()
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchFeaturedServices, fetchCategories]);
+  }, [fetchFeaturedServices, fetchCategories, fetchUnreadCount]);
 
 
   const getCategoryIcon = (category: string) => {
@@ -728,15 +843,165 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     }, 200);
   };
 
+  const renderProviderCard = (service: FeaturedService, keyPrefix: string) => {
+    const CategoryIcon = getCategoryIcon(service.category);
+    const subcats = Array.isArray(service.subcategories) ? service.subcategories : [];
+
+    let allImages: string[] = [];
+
+    if (service.brandImages && Array.isArray(service.brandImages) && service.brandImages.length > 0) {
+      allImages = [...service.brandImages].filter((url: any) => url && typeof url === 'string' && !url.startsWith('blob:'));
+    }
+
+    if (allImages.length < 3 && service.portfolio && Array.isArray(service.portfolio) && service.portfolio.length > 0) {
+      const portfolioUrls = service.portfolio.filter((url: any) => url && typeof url === 'string');
+      allImages = [...allImages, ...portfolioUrls];
+    }
+
+    allImages = Array.from(new Set(allImages)).slice(0, 3);
+              
+              return (
+              <TouchableOpacity 
+        key={`${keyPrefix}-${service.id}`}
+                    style={styles.featuredCard}
+                    onPress={() => handleFeaturedServicePress(service)}
+                    activeOpacity={0.8}
+                  >
+                    {service.isTopListed && (
+                      <View style={styles.featuredBadgeCard}>
+                        <View style={styles.featuredBadgeContentCard}>
+                          <Zap size={14} color="#ffffff" fill="#ffffff" />
+                          <Text style={styles.featuredBadgeTextCard}>FEATURED</Text>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={styles.featuredProviderInfo}>
+                      <View style={styles.featuredProviderIconContainer}>
+                        {(() => {
+                          if (service.user?.avatarUrl || service.User?.avatarUrl) {
+                            return (
+                          <Image
+                                source={{ uri: service.user?.avatarUrl || service.User?.avatarUrl }}
+                                style={styles.featuredProviderAvatarImage}
+                            resizeMode="cover"
+                          />
+                            );
+                          }
+                          if (service.brandImages && service.brandImages.length > 0) {
+                            const firstImg = service.brandImages[0];
+                            if (firstImg && typeof firstImg === 'string') {
+                              return (
+                                <Image
+                                  source={{ uri: firstImg }}
+                                  style={styles.featuredProviderAvatarImage}
+                                  resizeMode="cover"
+                                />
+                              );
+                            }
+                          }
+                          if (service.portfolio && service.portfolio.length > 0 && service.portfolio[0]) {
+                            return (
+                              <Image
+                                source={{ uri: service.portfolio[0] }}
+                                style={styles.featuredProviderAvatarImage}
+                                resizeMode="cover"
+                              />
+                            );
+                          }
+                          return <CategoryIcon size={32} color="#ec4899" />;
+                        })()}
+                      </View>
+
+                      <View style={styles.featuredProviderDetails}>
+                        <Text style={styles.featuredProviderName}>{service.businessName}</Text>
+                        <Text style={styles.featuredProviderOwner}>
+                          by {service.user?.fullName || service.User?.fullName || 'Provider'}
+                        </Text>
+                        <View style={styles.featuredProviderRating}>
+                          <Star size={16} color="#fbbf24" fill="#fbbf24" />
+                          <Text style={styles.featuredRatingTextCard}>{service.ratingAverage.toFixed(1)}</Text>
+                          <Text style={styles.featuredReviewsTextCard}>({service.ratingCount} reviews)</Text>
+                        </View>
+                        <View style={styles.featuredProviderLocation}>
+                          <MapPin size={14} color="#64748b" />
+                          <Text style={styles.featuredLocationTextCard}>
+                            {service.locationCity}{service.locationState ? `, ${service.locationState}` : ''}
+                          </Text>
+                        </View>
+                        {service.isAvailable && (
+                          <View style={styles.featuredAvailabilityContainer}>
+                            <Clock size={14} color="#10b981" />
+                            <Text style={styles.featuredAvailabilityText}>{service.estimatedArrival}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+        {subcats.length > 0 && (
+                        <View style={styles.featuredSubcategoriesContainer}>
+                          {subcats.slice(0, 3).map((subcat: string, idx: number) => {
+                            const formattedName = subcat
+                              .split('_')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                              .join(' ');
+                            return (
+                              <View key={idx} style={styles.featuredSubcategoryChip}>
+                                <Text style={styles.featuredSubcategoryText}>{formattedName}</Text>
+                              </View>
+                            );
+                          })}
+                          {subcats.length > 3 && (
+                            <View style={styles.featuredSubcategoryChip}>
+                              <Text style={styles.featuredSubcategoryText}>+{subcats.length - 3}</Text>
+                            </View>
+                          )}
+                        </View>
+        )}
+                    
+                    <View style={styles.featuredProviderBrandImages}>
+                          <View style={styles.featuredBrandImageGrid}>
+                            {allImages.length > 0 ? (
+                              <>
+                                {allImages.map((image, index) => (
+                                  <View key={index} style={styles.featuredBrandImageContainer}>
+                                <Image
+                                      source={{ uri: image }}
+                                      style={styles.featuredBrandImage}
+                                  resizeMode="cover"
+                                />
+                              </View>
+                            ))}
+                                {Array.from({ length: 3 - allImages.length }).map((_, i) => (
+                                  <View key={`placeholder-${i}`} style={styles.featuredBrandImagePlaceholder}>
+                                    <CategoryIcon size={20} color="#94a3b8" />
+                              </View>
+                                ))}
+                              </>
+                            ) : (
+                              [1, 2, 3].map((i) => (
+                                <View key={i} style={styles.featuredBrandImagePlaceholder}>
+                                  <CategoryIcon size={20} color="#94a3b8" />
+                              </View>
+                              ))
+                        )}
+                      </View>
+                      
+                      <View style={[
+                        styles.featuredAvailabilityBadge,
+                        service.isAvailable ? styles.featuredAvailabilityBadgeAvailable : styles.featuredAvailabilityBadgeBusy
+                      ]}>
+                        <Text style={styles.featuredAvailabilityBadgeText}>
+                          {service.isAvailable ? 'Available' : 'Busy'}
+                        </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Background gradient */}
-      <View style={styles.backgroundGradient}>
-        <View style={[styles.circle, styles.circle1]} />
-        <View style={[styles.circle, styles.circle2]} />
-        <View style={[styles.circle, styles.circle3]} />
-      </View>
-
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -757,9 +1022,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
             <View>
               <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'},</Text>
               <Text style={styles.userName}>
-                {userData?.role === 'provider' 
-                  ? 'Provider' 
-                  : userData?.user?.fullName || 'User'}!
+                {userName}!
               </Text>
             </View>
             <View style={styles.headerRight}>
@@ -779,28 +1042,36 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                 onPress={() => onNavigate?.('notifications')}
               >
                 <Bell size={20} color="#ec4899" />
-                <View style={[styles.badge, unreadCount === 0 && styles.badgeEmpty]}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.subtitle}>Find trusted pros for any job</Text>
+          <Text style={styles.subtitle}>Find trusted businesses and professionals</Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBarContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#94a3b8" />
+          <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
+            <Search size={20} color={isSearchFocused ? "#ec4899" : "#94a3b8"} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search for services..."
                 placeholderTextColor="#9ca3af"
                 value={searchQuery}
                 onChangeText={handleSearchChange}
-                onFocus={handleSearchFocus}
-                onBlur={handleSearchBlur}
+                onFocus={() => {
+                  setIsSearchFocused(true);
+                  handleSearchFocus();
+                }}
+                onBlur={() => {
+                  setIsSearchFocused(false);
+                  handleSearchBlur();
+                }}
                 returnKeyType="search"
                 onSubmitEditing={handleSearchPress}
               />
@@ -837,244 +1108,144 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
 
         {/* Popular Services */}
         <View style={styles.section}>
+          <View>
+            <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Popular Services</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.popularScroll}>
+              <TouchableOpacity
+                style={styles.sectionActionButton}
+                onPress={() => onNavigate?.('providers')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sectionActionText}>See all</Text>
+                <ArrowRight size={16} color="#ec4899" />
+              </TouchableOpacity>
+            </View>
+           
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.popularScrollContent}
+          >
             {popularServices.map((service, index) => {
-              const colors = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444'];
-              const color = colors[index % colors.length];
-              const IconComponent = service.icon;
+              const palette = popularAccentPalettes[index % popularAccentPalettes.length];
+              const IconComponent = service.icon || Wrench;
+              const hasIcon = !!IconComponent;
+              const fallbackInitial = service.name?.charAt(0)?.toUpperCase() || '?';
               
               return (
               <TouchableOpacity 
                 key={index} 
-                style={styles.popularCard}
+                  style={[
+                    styles.popularCard,
+                    { borderColor: palette.tint, shadowColor: palette.glow },
+                  ]}
                 onPress={() => handleCategoryPress(service.category)}
-              >
-                  <View style={[styles.popularIcon, { backgroundColor: `${color}20` }]}>
-                    <IconComponent size={24} color={color} />
-                </View>
-                <Text style={styles.popularText}>{service.name}</Text>
-              </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* All Categories */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>All Services</Text>
-          <View style={styles.categoriesGrid}>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => handleCategoryPress(category.id)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.categoryIcon, { backgroundColor: `${category.color}20` }]}>
-                  {category.iconImage ? (
-                    <Image source={category.iconImage} style={styles.categoryIconImage} resizeMode="cover" />
-                  ) : (
-                    <category.icon size={28} color={category.color} />
-                  )}
-                </View>
-                <Text style={styles.categoryName}>{category.name}</Text>
-                <Text style={styles.categoryDescription}>{category.description}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Featured Services */}
-        <View style={styles.featuredSection}>
-          <Text style={styles.sectionTitle}>Featured Providers</Text>
-          {isLoadingFeatured ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading featured services...</Text>
-            </View>
-          ) : featuredServices.length === 0 ? (
-            <View style={styles.emptyFeaturedContainer}>
-              <Text style={styles.emptyFeaturedText}>No featured services available</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
-              {featuredServices.map((service) => {
-                const CategoryIcon = getCategoryIcon(service.category);
-                return (
-                  <TouchableOpacity
-                    key={service.id}
-                    style={styles.featuredCard}
-                    onPress={() => handleFeaturedServicePress(service)}
-                    activeOpacity={0.8}
-                  >
-                    {/* Featured Badge */}
-                    {service.isTopListed && (
-                      <View style={styles.featuredBadgeCard}>
-                        <View style={styles.featuredBadgeContentCard}>
-                          <Zap size={14} color="#ffffff" fill="#ffffff" />
-                          <Text style={styles.featuredBadgeTextCard}>FEATURED</Text>
-                        </View>
-                      </View>
-                    )}
-
-                    <View style={styles.featuredProviderInfo}>
-                      {/* Avatar with priority logic */}
-                      <View style={styles.featuredProviderIconContainer}>
-                        {(() => {
-                          // Priority 1: User avatarUrl
-                          if (service.user?.avatarUrl || service.User?.avatarUrl) {
-                            return (
-                          <Image
-                                source={{ uri: service.user?.avatarUrl || service.User?.avatarUrl }}
-                                style={styles.featuredProviderAvatarImage}
-                            resizeMode="cover"
-                          />
-                            );
-                          }
-                          // Priority 2: First brandImage
-                          if (service.brandImages && service.brandImages.length > 0) {
-                            const firstImg = service.brandImages[0];
-                            if (firstImg && typeof firstImg === 'string') {
-                              return (
-                                <Image
-                                  source={{ uri: firstImg }}
-                                  style={styles.featuredProviderAvatarImage}
-                                  resizeMode="cover"
-                                />
-                              );
-                            }
-                          }
-                          // Priority 3: First portfolio image
-                          if (service.portfolio && service.portfolio.length > 0 && service.portfolio[0]) {
-                            return (
-                              <Image
-                                source={{ uri: service.portfolio[0] }}
-                                style={styles.featuredProviderAvatarImage}
-                                resizeMode="cover"
-                              />
-                            );
-                          }
-                          // Fallback: Category icon
-                          return <CategoryIcon size={32} color="#ec4899" />;
-                        })()}
-                      </View>
-
-                      <View style={styles.featuredProviderDetails}>
-                        <Text style={styles.featuredProviderName}>{service.businessName}</Text>
-                        <Text style={styles.featuredProviderOwner}>
-                          by {service.user?.fullName || service.User?.fullName || 'Provider'}
-                        </Text>
-                        <View style={styles.featuredProviderRating}>
-                          <Star size={16} color="#fbbf24" fill="#fbbf24" />
-                          <Text style={styles.featuredRatingTextCard}>{service.ratingAverage.toFixed(1)}</Text>
-                          <Text style={styles.featuredReviewsTextCard}>({service.ratingCount} reviews)</Text>
-                        </View>
-                        <View style={styles.featuredProviderLocation}>
-                          <MapPin size={14} color="#64748b" />
-                          <Text style={styles.featuredLocationTextCard}>
-                            {service.locationCity}{service.locationState ? `, ${service.locationState}` : ''}
+                  activeOpacity={0.88}
+                >
+                  <View style={[styles.popularAccent, { backgroundColor: palette.base }]} />
+                  <View style={styles.popularCardInner}>
+                    <View style={styles.popularIconWrapper}>
+                      <View style={[styles.popularIconCircle, { backgroundColor: palette.tint }]}>
+                        {hasIcon ? (
+                          <IconComponent size={24} color={palette.base} />
+                        ) : (
+                          <Text style={[styles.popularIconFallback, { color: palette.base }]}>
+                            {fallbackInitial}
                           </Text>
-                        </View>
-                        {service.isAvailable && (
-                          <View style={styles.featuredAvailabilityContainer}>
-                            <Clock size={14} color="#10b981" />
-                            <Text style={styles.featuredAvailabilityText}>{service.estimatedArrival}</Text>
-                          </View>
                         )}
-                      </View>
+                </View>
                     </View>
-
-                    {/* Subcategories */}
-                    {(() => {
-                      const subcats = Array.isArray(service.subcategories) ? service.subcategories : [];
-                      return subcats.length > 0 ? (
-                        <View style={styles.featuredSubcategoriesContainer}>
-                          {subcats.slice(0, 3).map((subcat: string, idx: number) => {
-                            // Format subcategory name: convert snake_case to Title Case
-                            const formattedName = subcat
-                              .split('_')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                              .join(' ');
-                            return (
-                              <View key={idx} style={styles.featuredSubcategoryChip}>
-                                <Text style={styles.featuredSubcategoryText}>{formattedName}</Text>
-                              </View>
-                            );
-                          })}
-                          {subcats.length > 3 && (
-                            <View style={styles.featuredSubcategoryChip}>
-                              <Text style={styles.featuredSubcategoryText}>+{subcats.length - 3}</Text>
-                            </View>
-                          )}
-                        </View>
-                      ) : null;
-                    })()}
-                    
-                    {/* Brand Images Grid */}
-                    <View style={styles.featuredProviderBrandImages}>
-                      {(() => {
-                        // Collect brand images from portfolio.brandImages (already extracted in mapping)
-                        let allImages: string[] = [];
-                        
-                        // Use brandImages (already extracted from portfolio.brandImages in the mapping above)
-                        if (service.brandImages && Array.isArray(service.brandImages) && service.brandImages.length > 0) {
-                          allImages = [...service.brandImages].filter((url: any) => url && typeof url === 'string' && !url.startsWith('blob:'));
-                        }
-                        
-                        // Add portfolio documents/images if we have less than 3
-                        if (allImages.length < 3 && service.portfolio && Array.isArray(service.portfolio) && service.portfolio.length > 0) {
-                          const portfolioUrls = service.portfolio.filter((url: any) => url && typeof url === 'string');
-                          allImages = [...allImages, ...portfolioUrls];
-                        }
-                        
-                        // Remove duplicates and take first 3
-                        allImages = Array.from(new Set(allImages)).slice(0, 3);
-                        
-                        return (
-                          <View style={styles.featuredBrandImageGrid}>
-                            {allImages.length > 0 ? (
-                              <>
-                                {allImages.map((image, index) => (
-                                  <View key={index} style={styles.featuredBrandImageContainer}>
-                                <Image
-                                      source={{ uri: image }}
-                                      style={styles.featuredBrandImage}
-                                  resizeMode="cover"
-                                />
-                              </View>
-                            ))}
-                                {/* Fill remaining slots with placeholders */}
-                                {Array.from({ length: 3 - allImages.length }).map((_, i) => (
-                                  <View key={`placeholder-${i}`} style={styles.featuredBrandImagePlaceholder}>
-                                    <CategoryIcon size={20} color="#94a3b8" />
-                              </View>
-                                ))}
-                              </>
-                            ) : (
-                              // No images available - show placeholders
-                              [1, 2, 3].map((i) => (
-                                <View key={i} style={styles.featuredBrandImagePlaceholder}>
-                                  <CategoryIcon size={20} color="#94a3b8" />
-                              </View>
-                              ))
-                        )}
-                      </View>
-                        );
-                      })()}
-                      
-                      {/* Availability Badge */}
-                      <View style={[
-                        styles.featuredAvailabilityBadge,
-                        service.isAvailable ? styles.featuredAvailabilityBadgeAvailable : styles.featuredAvailabilityBadgeBusy
-                      ]}>
-                        <Text style={styles.featuredAvailabilityBadgeText}>
-                          {service.isAvailable ? 'Available' : 'Busy'}
-                        </Text>
+                    <View style={styles.popularBody}>
+                      <Text style={styles.popularTitle}>{service.name}</Text>
+                      <Text style={styles.popularDescription}>
+                        Frequently booked by customers nearby.
+                      </Text>
+                    </View>
+                    <View style={styles.popularFooter}>
+                      <Text style={[styles.popularFooterText, { color: palette.base }]}>
+                        Discover providers
+                      </Text>
+                      <ArrowRight size={16} color={palette.base} />
                         </View>
                     </View>
                   </TouchableOpacity>
                 );
               })}
+            </ScrollView>
+        </View>
+
+        {/* Promotional Spotlight */}
+        <View style={styles.section}>
+          {/* <View style={[styles.sectionHeader, styles.promoHeader]}>
+            <Text style={styles.sectionTitle}>Promotions</Text>
+              <TouchableOpacity
+              style={styles.sectionActionButton}
+              onPress={() => onNavigate?.('providers')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.sectionActionText}>View offers</Text>
+              <ArrowRight size={16} color="#ec4899" />
+              </TouchableOpacity>
+        </View> */}
+
+          {isLoadingAds ? (
+            <View style={styles.adsLoadingCard}>
+              <Text style={styles.adsLoadingText}>Loading offers…</Text>
+            </View>
+          ) : adImages.length === 0 ? (
+            <View style={styles.adsEmptyCard}>
+              <Text style={styles.adsEmptyText}>No promotions available right now.</Text>
+            </View>
+          ) : (
+            <Animated.View style={[styles.adsCard, { opacity: adFadeAnim }]}>
+                          <Image
+                source={adImages[currentAdIndex]}
+                style={styles.adsImage}
+                            resizeMode="cover"
+                          />
+              <View style={styles.adsOverlay} />
+              <View style={styles.adsContent}>
+                <Text style={styles.adsHeadline}>Limited Time Offer</Text>
+                <Text style={styles.adsSubtext}>Book now and enjoy exclusive savings.</Text>
+                      </View>
+            </Animated.View>
+          )}
+        </View>
+
+  {/* Top Rated Providers */}
+  <View style={styles.featuredSection}>
+    <Text style={styles.sectionTitle}>Top Rated Providers</Text>
+    {isLoadingFeatured ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+        {renderSkeletonCards(3, 'top-rated-skeleton')}
+      </ScrollView>
+    ) : topRatedServices.length === 0 ? (
+      <View style={styles.emptyFeaturedContainer}>
+        <Text style={styles.emptyFeaturedText}>No top rated providers available</Text>
+      </View>
+    ) : (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+        {topRatedServices.map((service) => renderProviderCard(service, 'top-rated'))}
+      </ScrollView>
+    )}
+  </View>
+
+        {/* Featured Services */}
+        <View style={styles.featuredSection}>
+          <Text style={styles.sectionTitle}>Featured Providers</Text>
+          {isLoadingFeatured ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+              {renderSkeletonCards(3, 'featured-skeleton')}
+            </ScrollView>
+          ) : featuredServices.length === 0 ? (
+            <View style={styles.emptyFeaturedContainer}>
+              <Text style={styles.emptyFeaturedText}>No featured services available</Text>
+                    </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+              {featuredServices.map((service) => renderProviderCard(service, 'featured'))}
             </ScrollView>
           )}
         </View>
@@ -1098,7 +1269,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         onClose={() => setShowBookingModal(false)}
         onBooked={(bookingId) => {
           setShowBookingModal(false);
-          Alert.alert('Booking Confirmed', `Your booking (ID: ${bookingId}) has been placed.`);
+          Alert.alert(
+            'Booking Confirmed',
+            `Your booking (ID: ${bookingId}) has been placed.`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  onNavigate?.('bookings');
+                },
+              },
+            ],
+            { cancelable: false }
+          );
         }}
       />
     </SafeAreaView>
@@ -1110,40 +1293,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
   },
-  backgroundGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#fdf2f8',
-  },
-  circle: {
-    position: 'absolute',
-    borderRadius: 1000,
-    opacity: 0.1,
-  },
-  circle1: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#ec4899',
-    top: -100,
-    right: -50,
-  },
-  circle2: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#f97316',
-    bottom: 100,
-    left: -75,
-  },
-  circle3: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#ec4899',
-    top: height * 0.3,
-    right: 50,
-  },
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
@@ -1151,55 +1300,66 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   header: {
-    marginBottom: 30,
-    padding: 16,
-    backgroundColor: '#ffffffcc',
-    borderRadius: 16,
+    marginBottom: 24,
+    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#f3e8ff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: '#f1f5f9',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   refreshButton: {
-    padding: 8,
-    borderRadius: 20,
+    padding: 10,
+    borderRadius: 12,
     backgroundColor: '#fdf2f8',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#fce7f3',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   refreshButtonActive: {
     backgroundColor: '#ec4899',
     borderColor: '#ec4899',
+    shadowOpacity: 0.3,
   },
   refreshingIcon: {
     transform: [{ rotate: '180deg' }],
   },
   notificationButton: {
     position: 'relative',
-    padding: 8,
-    borderRadius: 20,
+    padding: 10,
+    borderRadius: 12,
     backgroundColor: '#fdf2f8',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#fce7f3',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: -4,
+    right: -4,
     backgroundColor: '#ef4444',
     borderRadius: 10,
     minWidth: 20,
@@ -1209,54 +1369,68 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     borderWidth: 2,
     borderColor: '#ffffff',
+    zIndex: 10,
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   badgeText: {
     color: '#ffffff',
     fontSize: 10,
     fontWeight: 'bold',
-  },
-  badgeEmpty: {
-    backgroundColor: '#94a3b8',
+    lineHeight: 12,
   },
   greeting: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#64748b',
     fontWeight: '600',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
+    marginBottom: 2,
   },
   userName: {
-    fontSize: 26,
-    fontWeight: 'bold',
+    fontSize: 28,
+    fontWeight: '700',
     color: '#0f172a',
+    letterSpacing: -0.5,
   },
   
   subtitle: {
-    fontSize: 15,
-    color: '#475569',
-    fontWeight: '600',
-    marginTop: 6,
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+    marginTop: 4,
+    letterSpacing: 0.2,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 28,
+    gap: 10,
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     borderWidth: 2,
-    borderColor: '#e5e7eb',
-    marginRight: 12,
+    borderColor: '#e2e8f0',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  searchBarFocused: {
+    borderColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
   },
   searchBarContainer: {
     flex: 1,
@@ -1266,7 +1440,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#0f172a',
-    marginLeft: 8,
+    marginLeft: 10,
+    fontWeight: '500',
+    paddingVertical: 0,
   },
   suggestionsContainer: {
     position: 'absolute',
@@ -1274,133 +1450,251 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    marginTop: 4,
-    maxHeight: 300,
+    borderRadius: 16,
+    marginTop: 6,
+    maxHeight: 320,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
     zIndex: 1000,
+    overflow: 'hidden',
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
   },
   suggestionContent: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
   },
   suggestionText: {
     fontSize: 15,
     color: '#0f172a',
-    fontWeight: '500',
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 3,
+    letterSpacing: 0.2,
   },
   suggestionType: {
     fontSize: 12,
     color: '#64748b',
+    fontWeight: '500',
   },
   searchButton: {
     backgroundColor: '#ec4899',
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 16,
+    padding: 16,
+    minWidth: 56,
+    minHeight: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   section: {
+    marginTop: 10,
     marginBottom: 30,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#0f172a',
-    marginBottom: 16,
-  },
-  popularScroll: {
-    marginHorizontal: -20,
-    paddingHorizontal: 20,
-  },
-  popularCard: {
-    alignItems: 'center',
-    marginRight: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    minWidth: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  popularIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 8,
+    marginRight: 12,
+    flexShrink: 1,
   },
-  popularText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0f172a',
-    textAlign: 'center',
-  },
-  categoriesGrid: {
+  sectionHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  categoryCard: {
-    width: (width - 60) / 2,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  categoryIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 12,
-    overflow: 'hidden', // Ensure image doesn't overflow the circular container
+    gap: 12,
+    flexWrap: 'wrap',
   },
-  categoryIconImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 30, // Match parent borderRadius for circular image
+  sectionActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fdf2f8',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#fce7f3',
+    marginTop: 4,
   },
-  categoryName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  categoryDescription: {
+  sectionSubtitle: {
     fontSize: 12,
     color: '#64748b',
+    marginTop: 4,
+  },
+  skeletonCard: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  sectionActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ec4899',
+  },
+  popularScrollContent: {
+    paddingRight: 20,
+    gap: 18,
+  },
+  popularCard: {
+    width: 220,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 5,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  popularAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 64,
+  },
+  popularCardInner: {
+    flex: 1,
+    padding: 18,
+    justifyContent: 'space-between',
+    gap: 18,
+  },
+  popularIconWrapper: {
+    position: 'relative',
+  },
+  popularIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ffffff',
+  },
+  popularIconFallback: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  popularBody: {
+    gap: 8,
+  },
+  popularTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  popularDescription: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18,
+  },
+  popularFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+  },
+  popularFooterText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adsScrollContent: {
+    paddingRight: 20,
+    gap: 16,
+  },
+  adsLoadingCard: {
+    width: 240,
+    height: 140,
+    borderRadius: 24,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  adsLoadingText: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  adsEmptyCard: {
+    width: 240,
+    height: 140,
+    borderRadius: 24,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  adsEmptyText: {
+    fontSize: 13,
+    color: '#94a3b8',
     textAlign: 'center',
-    lineHeight: 16,
+  },
+  adsCard: {
+    width: '95%',
+    maxWidth: 360,
+    height: 160,
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.3)',
+    alignSelf: 'center',
+  },
+  adsImage: {
+    width: '100%',
+    height: '100%',
+  },
+  adsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  adsContent: {
+    position: 'absolute',
+    inset: 0,
+    padding: 18,
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  adsHeadline: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  adsSubtext: {
+    fontSize: 12,
+    color: '#e2e8f0',
+  },
+  promoSection: {
+    alignItems: 'center',
+  },
+  promoHeader: {
+    width: '100%',
   },
   featuredSection: {
     marginBottom: 30,

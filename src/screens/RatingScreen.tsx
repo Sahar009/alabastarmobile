@@ -18,7 +18,7 @@ interface RatingScreenProps {
   isVisible: boolean;
   booking: any;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (rating: number, comment?: string) => void;
 }
 
 const RatingScreen: React.FC<RatingScreenProps> = ({
@@ -57,13 +57,17 @@ const RatingScreen: React.FC<RatingScreenProps> = ({
       if (response.success) {
         Alert.alert('Success', 'Thank you for your review!');
         handleClose();
-        onSuccess();
+        onSuccess(rating, comment.trim() || undefined);
       } else {
         Alert.alert('Error', response.message || 'Failed to submit review');
       }
     } catch (error: any) {
       console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Failed to submit review');
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        'Failed to submit review';
+      Alert.alert('Error', apiMessage);
     } finally {
       setIsSubmitting(false);
     }

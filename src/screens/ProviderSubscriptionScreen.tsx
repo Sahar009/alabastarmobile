@@ -23,7 +23,7 @@ import {
   ShieldCheck,
   Wallet,
 } from 'lucide-react-native';
-import { apiService } from '../services/api';
+import { apiService, API_BASE_URL } from '../services/api';
 
 interface ProviderSubscriptionScreenProps {
   userData: any;
@@ -115,7 +115,7 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
 ];
 
 const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
-  userData,
+  userData: _userData,
   onBack,
   onNavigate,
 }) => {
@@ -137,7 +137,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
         currency,
         minimumFractionDigits: 0,
       }).format(amount);
-    } catch (error) {
+    } catch (_error) {
       return `${currency} ${amount.toFixed(0)}`;
     }
   }, []);
@@ -154,7 +154,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
         month: 'short',
         day: 'numeric',
       });
-    } catch (error) {
+    } catch (_error) {
       return '—';
     }
   }, []);
@@ -280,8 +280,8 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
             featureLimits: null,
           });
         }
-      } catch (error) {
-        console.error('Error loading cached subscription:', error);
+      } catch (storageError) {
+        console.error('Error loading cached subscription:', storageError);
       }
     };
     
@@ -321,7 +321,9 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
           onPress: async () => {
             try {
               setActionLoading(true);
-              const response = await apiService.initializeProviderSubscription(plan.id);
+              const apiHost = API_BASE_URL.replace(/\/api\/?$/, '');
+              const callbackUrl = `${apiHost}/subscriptions/payment/callback?platform=mobile`;
+              const response = await apiService.initializeProviderSubscription(plan.id, { callbackUrl });
               if (response.success && response.data) {
                 const paymentUrl =
                   response.data.authorizationUrl ||
@@ -624,7 +626,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
           )}
         </View>
 
-        <View style={{ height: 80 }} />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {loading && !refreshing ? (
@@ -955,6 +957,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
+  },
+  bottomSpacer: {
+    height: 80,
   },
 });
 

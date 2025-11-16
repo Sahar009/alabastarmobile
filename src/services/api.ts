@@ -1,6 +1,6 @@
 // API Configuration
-export const API_BASE_URL = 'https://alabastar-backend.onrender.com/api'; // Update this to your backend URL
-
+// export const API_BASE_URL = 'http://localhost:8000/api'; // Update this to your backend URL
+export const API_BASE_URL = "https://alabastar-backend.onrender.com/api"
 // API Response Interface
 interface ApiResponse<T = any> {
   success: boolean;
@@ -17,6 +17,7 @@ export interface User {
   role: 'customer' | 'provider';
   status: string;
   provider: string;
+  avatarUrl?: string;
 }
 
 export interface Customer {
@@ -109,6 +110,12 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    // Always ensure token is loaded from AsyncStorage before making requests
+    // This ensures tokens persist across app restarts and after registration
+    if (!this.token) {
+      await this.loadToken();
+    }
+    
     const url = `${this.baseURL}${endpoint}`;
     const method = options.method || 'GET';
     
@@ -260,7 +267,7 @@ class ApiService {
     });
   }
 
-  async uploadProfilePicture(formData: FormData): Promise<ApiResponse<{ url: string }>> {
+  async uploadProfilePicture(formData: FormData): Promise<ApiResponse<{ avatarUrl: string; user?: User }>> {
     const url = `${this.baseURL}/auth/profile/picture`;
     
     const config: RequestInit = {
@@ -412,6 +419,13 @@ class ApiService {
       }, {} as Record<string, string>)
     ).toString();
     return this.request(`/notifications${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getUnreadNotificationCount(): Promise<ApiResponse<{ unreadCount: number }>> {
+    // Token will be auto-loaded by request() method if missing
+    return this.request<{ unreadCount: number }>(`/notifications/unread-count`, {
+      method: 'GET',
+    });
   }
 
   async markNotificationAsRead(notificationId: string): Promise<ApiResponse> {
@@ -580,10 +594,10 @@ class ApiService {
     return this.request('/subscription-plans/plans');
   }
 
-  async initializeProviderSubscription(subscriptionPlanId: string): Promise<ApiResponse<any>> {
+  async initializeProviderSubscription(planId: string, options?: { callbackUrl?: string }): Promise<ApiResponse<any>> {
     return this.request('/subscriptions/initialize-payment', {
       method: 'POST',
-      body: JSON.stringify({ subscriptionPlanId }),
+      body: JSON.stringify({ planId, callbackUrl: options?.callbackUrl }),
     });
   }
 
@@ -653,6 +667,23 @@ class ApiService {
     });
   }
 
+  async createBooking(payload: {
+    providerId: string;
+    serviceId?: string;
+    scheduledAt: string;
+    locationAddress: string;
+    locationCity?: string;
+    locationState?: string;
+    latitude?: number;
+    longitude?: number;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Messaging methods
   async sendMessage(recipientId: string, content: string, bookingId?: string): Promise<ApiResponse> {
     return this.request('/messages/send', {
@@ -673,18 +704,20 @@ class ApiService {
     });
   }
 
-  // Firebase Authentication (for future implementation)
-  async firebaseAuth(firebaseData: {
+  // Firebase/Google Authentication
+  // This endpoint accepts both Firebase ID tokens and Google ID tokens
+  // Firebase Admin SDK can verify both types of tokens
+  async firebaseAuth(authData: {
     idToken: string;
-    email: string;
+    email?: string;
     displayName?: string;
     photoURL?: string;
-    uid: string;
+    uid?: string;
     phone?: string;
   }): Promise<ApiResponse<AuthResponse>> {
     return this.request<AuthResponse>('/auth/firebase', {
       method: 'POST',
-      body: JSON.stringify(firebaseData),
+      body: JSON.stringify(authData),
     });
   }
 

@@ -1,9 +1,9 @@
 import React from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,15 +19,13 @@ const SplashScreen: React.FC = () => {
 
       {/* Content */}
       <View style={styles.content}>
-        {/* Logo placeholder */}
         <View style={styles.logoContainer}>
-          <View style={styles.logoPlaceholder}>
-            <Text style={styles.logoText}>A</Text>
-          </View>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
-
-        {/* App name */}
-        <Text style={styles.appName}>Alabastar</Text>
         
         {/* Loading indicator */}
         <View style={styles.loadingContainer}>
@@ -76,26 +74,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
-    marginBottom: 24,
-  },
-  logoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#ec4899', // Pink-500
-    justifyContent: 'center',
+    marginBottom: 60,
     alignItems: 'center',
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#0f172a',
-    marginBottom: 60,
+  logo: {
+    width: 120,
+    height: 80,
   },
   loadingContainer: {
     marginTop: 20,

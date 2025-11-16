@@ -97,6 +97,8 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [subcategoryInput, setSubcategoryInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [referralCodeValid, setReferralCodeValid] = useState<boolean | null>(null);
   const [referralCodeInfo, setReferralCodeInfo] = useState<any>(null);
@@ -343,6 +345,19 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
     }
   };
 
+  const isValidPhoneNumber = (phone: string) => {
+    // Remove all spaces and dashes
+    const cleanPhone = phone.replace(/[\s-]/g, '');
+    
+    // Accept Nigerian phone number formats:
+    // - Starting with 0 (e.g., 09101128282)
+    // - Starting with +234 (e.g., +2349101128282)
+    // - Starting with 234 (e.g., 2349101128282)
+    const nigerianPhoneRegex = /^(\+?234|0)?[789][01]\d{8}$/;
+    
+    return nigerianPhoneRegex.test(cleanPhone);
+  };
+
   const validateStep = (step: Step) => {
     if (step === 1) {
       if (!formData.fullName.trim() || !formData.businessName.trim() || !formData.email.trim() || !formData.password.trim()) {
@@ -351,6 +366,14 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
       }
       if (formData.password !== formData.confirmPassword) {
         Alert.alert('Password Mismatch', 'Passwords do not match.');
+        return false;
+      }
+      if (formData.phone.trim() && !isValidPhoneNumber(formData.phone)) {
+        Alert.alert('Invalid Phone Number', 'Please enter a valid Nigerian phone number (e.g., 09101128282, 2349101128282, or +2349101128282).');
+        return false;
+      }
+      if (formData.alternativePhone.trim() && !isValidPhoneNumber(formData.alternativePhone)) {
+        Alert.alert('Invalid Phone Number', 'Please enter a valid Nigerian phone number for the alternative phone.');
         return false;
       }
     }
@@ -639,11 +662,21 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
             <TextInput
               style={styles.textInput}
               placeholder="Create a password"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               autoCapitalize="none"
               value={formData.password}
               onChangeText={value => handleInputChange('password', value)}
             />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? (
+                <EyeOff size={20} color="#94a3b8" />
+              ) : (
+                <Eye size={20} color="#94a3b8" />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -654,11 +687,21 @@ const ProviderRegistrationScreen: React.FC<ProviderRegistrationScreenProps> = ({
             <TextInput
               style={styles.textInput}
               placeholder="Confirm your password"
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               autoCapitalize="none"
               value={formData.confirmPassword}
               onChangeText={value => handleInputChange('confirmPassword', value)}
             />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+            >
+              {showConfirmPassword ? (
+                <EyeOff size={20} color="#94a3b8" />
+              ) : (
+                <Eye size={20} color="#94a3b8" />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1148,6 +1191,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     backgroundColor: '#f8fafc',
+    position: 'relative',
   },
   inputIcon: {
     marginRight: 10,
@@ -1157,6 +1201,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#0f172a',
     paddingVertical: 10,
+    paddingRight: 40, // Add padding to prevent text from overlapping with eye icon
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    padding: 4,
+    zIndex: 1,
   },
   textAreaWrapper: {
     alignItems: 'flex-start',

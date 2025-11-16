@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 
 const API_BASE_URL = 'https://alabastar-backend.onrender.com/api';
-const SOCKET_URL = 'https://alabastar-backend.onrender.com/api';
+const SOCKET_URL = 'https://alabastar-backend.onrender.com';
 
 // Types
 export interface Conversation {
@@ -17,12 +17,17 @@ export interface Conversation {
 
 export interface Message {
   id: number;
-  content: string;
+  conversationId: number;
   senderId: string;
   sender: User;
-  conversationId: number;
-  type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'location' | 'system';
-  mediaUrl?: string;
+  content: string | null;
+  messageType: 'text' | 'image' | 'video' | 'audio' | 'file' | 'location' | 'system';
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  metadata?: Record<string, any> | null;
+  replyToId?: number | null;
   createdAt: string;
   updatedAt?: string;
   readBy?: string[];
@@ -55,10 +60,19 @@ class MessagingService {
 
     console.log('🔌 Initializing socket connection...');
 
+    const sanitizedToken = token.replace(/^Bearer\s+/i, '').trim();
+
     this.socket = io(SOCKET_URL, {
       auth: { 
-        token: token.trim() // Ensure token is trimmed
+        token: sanitizedToken
       },
+      query: {
+        token: sanitizedToken
+      },
+      extraHeaders: {
+        Authorization: `Bearer ${sanitizedToken}`
+      },
+      withCredentials: true,
       transports: ['websocket', 'polling'], // Allow fallback to polling
       reconnection: true,
       reconnectionDelay: 1000,
@@ -161,7 +175,7 @@ class MessagingService {
     if (!token) throw new Error('No token found');
 
     const response = await fetch(
-      `${API_BASE_URL}/messages/conversations/${conversationId}?page=${page}&limit=${limit}`,
+      `${API_BASE_URL}/messages/conversations/${conversationId}/messages?page=${page}&limit=${limit}`,
       {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -172,43 +186,96 @@ class MessagingService {
 
     if (!response.ok) throw new Error('Failed to fetch messages');
     const data = await response.json();
-    return data.data?.messages || [];
+    return data.data?.messages || data.data?.items || [];
   }
 
-  async sendMessage(conversationId: number, content: string, type: string = 'text', mediaUrl?: string): Promise<Message> {
+  async sendMessage(
+    conversationId: number,
+    content: string,
+    options?: {
+      messageType?: Message['messageType'];
+      file?: {
+        uri: string;
+        name: string;
+        type: string;
+      };
+      fileSize?: number;
+      mediaUrl?: string;
+    }
+  ): Promise<Message> {
     const token = await AsyncStorage.getItem('token');
     if (!token) throw new Error('No token found');
 
-    const response = await fetch(`${API_BASE_URL}/messages/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ content, type, mediaUrl }),
-    });
+    const url = `${API_BASE_URL}/messages/conversations/${conversationId}/messages`;
+    const defaultMessageType = options?.messageType || (options?.file ? 'file' : 'text');
+
+    let response: Response;
+
+    if (options?.file) {
+      const formData = new FormData();
+      if (content) {
+        formData.append('content', content);
+      }
+      formData.append('messageType', defaultMessageType);
+      if (options.mediaUrl) {
+        formData.append('mediaUrl', options.mediaUrl);
+      }
+      if (options.fileSize !== undefined && options.fileSize !== null) {
+        formData.append('fileSize', String(options.fileSize));
+      }
+      formData.append('file', {
+        uri: options.file.uri,
+        name: options.file.name,
+        type: options.file.type,
+      } as any);
+
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+    } else {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content,
+          messageType: defaultMessageType,
+          mediaUrl: options?.mediaUrl,
+        }),
+      });
+    }
 
     if (!response.ok) throw new Error('Failed to send message');
     const data = await response.json();
-    return data.data?.message;
+    return data.data?.message || data.data;
   }
 
   async createConversation(participantId: string, bookingId?: string): Promise<Conversation> {
     const token = await AsyncStorage.getItem('token');
     if (!token) throw new Error('No token found');
 
-    const response = await fetch(`${API_BASE_URL}/messages/conversations`, {
+    const response = await fetch(`${API_BASE_URL}/messages/conversations/direct`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ participantId, bookingId }),
+      body: JSON.stringify({ recipientId: participantId, bookingId }),
     });
 
     if (!response.ok) throw new Error('Failed to create conversation');
     const data = await response.json();
-    return data.data?.conversation;
+    const conversation = data.data?.conversation || data.data;
+    if (!conversation) {
+      throw new Error(data.message || 'Failed to create conversation');
+    }
+    return conversation;
   }
 
   // Socket methods

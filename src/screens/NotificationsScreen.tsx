@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
-  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -49,6 +49,34 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
+  
+  const skeletonOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 1],
+  });
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [skeletonPulse]);
 
   useEffect(() => {
     fetchNotifications();
@@ -170,6 +198,24 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     }
   };
 
+  const renderSkeletonCard = () => (
+    <View style={styles.skeletonCard}>
+      <View style={styles.skeletonHeader}>
+        <Animated.View style={[styles.skeletonTitleLine, { opacity: skeletonOpacity }]} />
+        <View style={styles.skeletonActions}>
+          <Animated.View style={[styles.skeletonActionButton, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonActionButton, { opacity: skeletonOpacity }]} />
+        </View>
+      </View>
+      <Animated.View style={[styles.skeletonBodyLine, { opacity: skeletonOpacity }]} />
+      <Animated.View style={[styles.skeletonBodyLineShort, { opacity: skeletonOpacity }]} />
+      <View style={styles.skeletonFooter}>
+        <Animated.View style={[styles.skeletonCategoryBadge, { opacity: skeletonOpacity }]} />
+        <Animated.View style={[styles.skeletonTimeLine, { opacity: skeletonOpacity }]} />
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -244,8 +290,10 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
         }
       >
         {loading && notifications.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ec4899" />
+          <View style={styles.skeletonContainer}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <React.Fragment key={index}>{renderSkeletonCard()}</React.Fragment>
+            ))}
           </View>
         ) : notifications.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -448,10 +496,72 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  loadingContainer: {
-    paddingVertical: 60,
+  skeletonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  skeletonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 12,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    gap: 8,
+  },
+  skeletonTitleLine: {
+    flex: 1,
+    height: 18,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 9,
+  },
+  skeletonActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  skeletonActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonBodyLine: {
+    height: 14,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 7,
+    marginBottom: 8,
+    width: '100%',
+  },
+  skeletonBodyLineShort: {
+    height: 14,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 7,
+    width: '75%',
+    marginBottom: 12,
+  },
+  skeletonFooter: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  skeletonCategoryBadge: {
+    width: 80,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonTimeLine: {
+    width: 120,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
   },
   emptyContainer: {
     paddingVertical: 60,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
-  ActivityIndicator,
   Modal,
   Linking,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -71,6 +71,7 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showRatingScreen, setShowRatingScreen] = useState(false);
   const [bookingToRate, setBookingToRate] = useState<Booking | null>(null);
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   const fetchBookings = useCallback(async () => {
     try {
@@ -107,6 +108,28 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [skeletonPulse]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -153,27 +176,60 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
   };
 
   const handleUpdateStatus = (booking: Booking) => {
-    // Show options to update status
-    Alert.alert(
-      'Update Booking Status',
-      'Select new status:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Mark as In Progress', 
-          onPress: () => updateBookingStatus(booking.id, 'in_progress') 
-        },
-        { 
-          text: 'Mark as Completed', 
-          onPress: () => updateBookingStatus(booking.id, 'completed') 
-        },
-        { 
-          text: 'Cancel Booking', 
-          style: 'destructive',
-          onPress: () => updateBookingStatus(booking.id, 'cancelled') 
-        },
-      ]
-    );
+    const nextActions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [
+      { text: 'Close', style: 'cancel' },
+    ];
+
+    const status = booking.status.toLowerCase();
+
+    if (status === 'requested') {
+      nextActions.push({
+        text: 'Mark as In Progress',
+        onPress: () => updateBookingStatus(booking.id, 'in_progress'),
+        style: 'default',
+      });
+      nextActions.push({
+        text: 'Mark as Completed',
+        onPress: () => updateBookingStatus(booking.id, 'completed'),
+        style: 'default',
+      });
+      nextActions.push({
+        text: 'Cancel Booking',
+        style: 'destructive',
+        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
+      });
+    } else if (status === 'accepted') {
+      nextActions.push({
+        text: 'Mark as In Progress',
+        onPress: () => updateBookingStatus(booking.id, 'in_progress'),
+      });
+      nextActions.push({
+        text: 'Mark as Completed',
+        onPress: () => updateBookingStatus(booking.id, 'completed'),
+        style: 'default',
+      });
+      nextActions.push({
+        text: 'Cancel Booking',
+        style: 'destructive',
+        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
+      });
+    } else if (status === 'in_progress') {
+      nextActions.push({
+        text: 'Mark as Completed',
+        onPress: () => updateBookingStatus(booking.id, 'completed'),
+        style: 'default',
+      });
+      nextActions.push({
+        text: 'Cancel Booking',
+        style: 'destructive',
+        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
+      });
+    } else {
+      Alert.alert('Info', 'This booking can no longer be updated.');
+      return;
+    }
+
+    Alert.alert('Update Booking Status', 'Select new status:', nextActions);
   };
 
   const updateBookingStatus = async (bookingId: string, newStatus: string) => {
@@ -276,6 +332,23 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
     completed: bookings.filter(b => b.status === 'completed').length,
     cancelled: bookings.filter(b => b.status === 'cancelled').length,
   };
+
+  const skeletonOpacity = skeletonPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 1],
+  });
+
+  const renderSkeletonCard = (key: number) => (
+    <View key={key} style={styles.skeletonCard}>
+      <Animated.View style={[styles.skeletonHeaderLine, { opacity: skeletonOpacity }]} />
+      <Animated.View style={[styles.skeletonSubLine, { opacity: skeletonOpacity }]} />
+      <View style={styles.skeletonRowGroup}>
+        <Animated.View style={[styles.skeletonChip, { opacity: skeletonOpacity }]} />
+        <Animated.View style={[styles.skeletonChipShort, { opacity: skeletonOpacity }]} />
+      </View>
+      <Animated.View style={[styles.skeletonButton, { opacity: skeletonOpacity }]} />
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -386,8 +459,8 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
         }
       >
         {loading && bookings.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ec4899" />
+          <View style={styles.skeletonContainer}>
+            {Array.from({ length: 3 }).map((_, index) => renderSkeletonCard(index))}
           </View>
         ) : bookings.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -478,7 +551,7 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
           ))
         )}
 
-        <View style={{ height: 100 }} />
+        <View style={styles.footerSpacer} />
       </ScrollView>
 
       {/* Details Modal */}
@@ -681,6 +754,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  skeletonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  skeletonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+  },
+  skeletonHeaderLine: {
+    height: 18,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  skeletonSubLine: {
+    height: 14,
+    backgroundColor: '#e2e8f0',
+    borderRadius: 7,
+    width: '60%',
+  },
+  skeletonRowGroup: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+    marginBottom: 16,
+  },
+  skeletonChip: {
+    flex: 1,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonChipShort: {
+    width: 80,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0',
+  },
+  skeletonButton: {
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+  },
   emptyContainer: {
     paddingVertical: 60,
     alignItems: 'center',
@@ -698,6 +818,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  footerSpacer: {
+    height: 100,
   },
   bookingCard: {
     backgroundColor: '#ffffff',

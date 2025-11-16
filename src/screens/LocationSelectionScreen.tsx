@@ -328,7 +328,7 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Choose Location</Text>
           <Text style={styles.headerSubtitle}>
-            {getCategoryDisplayName(selectedCategory)} services in Lagos
+            {getCategoryDisplayName(selectedCategory)} services/Businesses in Lagos
           </Text>
         </View>
       </View>

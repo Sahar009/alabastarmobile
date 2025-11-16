@@ -11,7 +11,8 @@ import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '../config/googleSign
 
 interface AuthNavigatorProps {
   onAuthSuccess: (userData: any) => void;
-  onBackToUserTypeSelection: () => void;
+  onSwitchToCustomerAuth: () => void;
+  onSwitchToProviderAuth: () => void;
   userType: 'user' | 'provider';
 }
 
@@ -23,7 +24,12 @@ interface AuthState {
   currentScreen: AuthScreen;
 }
 
-const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUserTypeSelection, userType }) => {
+const AuthNavigator: React.FC<AuthNavigatorProps> = ({
+  onAuthSuccess,
+  onSwitchToCustomerAuth,
+  onSwitchToProviderAuth,
+  userType,
+}) => {
   const [authState, setAuthState] = useState<AuthState>({
     currentScreen: 'login',
   });
@@ -36,11 +42,13 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
 
   useEffect(() => {
     // Configure Google Sign-In only if we have the necessary credentials for the current platform
-    const hasWebClientId = Boolean(GOOGLE_WEB_CLIENT_ID);
-    const hasIosClientId = Boolean(GOOGLE_IOS_CLIENT_ID);
+    const webClientId = String(GOOGLE_WEB_CLIENT_ID || '').trim();
+    const iosClientId = String(GOOGLE_IOS_CLIENT_ID || '').trim();
+    const hasWebClientId = webClientId.length > 0;
+    const hasIosClientId = iosClientId.length > 0;
     
     // Platform-specific requirements:
-    // - iOS: Needs either iosClientId OR GoogleService-Info.plist
+    // - iOS: Needs either iosClientId OR webClientId (webClientId works as fallback)
     // - Android: Needs webClientId
     const canConfigure = Platform.OS === 'ios' 
       ? (hasIosClientId || hasWebClientId) // iOS can work with either
@@ -54,26 +62,45 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
     // Build config object conditionally
     const config: any = {};
     
-    // Only add webClientId if it exists (required for Android and offline access)
-    if (GOOGLE_WEB_CLIENT_ID) {
-      config.webClientId = GOOGLE_WEB_CLIENT_ID;
+    // For iOS: The library requires iosClientId OR GoogleService-Info.plist
+    // If iosClientId is not provided, use webClientId as fallback
+    if (Platform.OS === 'ios') {
+      if (hasIosClientId) {
+        config.iosClientId = iosClientId;
+      } else if (hasWebClientId) {
+        // Use webClientId as iosClientId on iOS (works if they're from the same project)
+        config.iosClientId = webClientId;
+      }
+      // Always provide webClientId for iOS (required for ID token)
+      if (hasWebClientId) {
+        config.webClientId = webClientId;
+      }
+    } else {
+      // Android: Only needs webClientId
+      if (hasWebClientId) {
+        config.webClientId = webClientId;
+      }
     }
     
-    // Only add iosClientId if it exists (required for iOS if GoogleService-Info.plist is missing)
-    if (GOOGLE_IOS_CLIENT_ID) {
-      config.iosClientId = GOOGLE_IOS_CLIENT_ID;
-    }
-    
-    // Only enable offline access if webClientId is configured
+    // Enable offline access if webClientId is configured
     if (hasWebClientId) {
       config.offlineAccess = true;
       config.forceCodeForRefreshToken = true;
     }
     
-    try {
-      GoogleSignin.configure(config);
-    } catch (error) {
-      console.error('Error configuring Google Sign-In:', error);
+    // Only configure if we have at least one client ID
+    if (Object.keys(config).length > 0) {
+      try {
+        GoogleSignin.configure(config);
+        console.log('Google Sign-In configured successfully');
+      } catch (error: any) {
+        // Suppress configuration errors - Google Sign-In just won't work until properly configured
+        console.warn('Google Sign-In configuration warning:', error?.message || error);
+        // On iOS, if configuration fails, it's usually because:
+        // 1. iosClientId is missing (we're using webClientId as fallback)
+        // 2. GoogleService-Info.plist is missing
+        // This is expected if not fully configured - don't break the app
+      }
     }
   }, []);
 
@@ -145,7 +172,7 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
       console.log('Password reset request:', email);
       
       // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
     } catch (error) {
       throw error;
     }
@@ -168,54 +195,61 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
   };
 
   const handleGoogleSignIn = async () => {
-    // Check platform-specific requirements
-    if (Platform.OS === 'ios') {
-      // iOS needs either iosClientId OR GoogleService-Info.plist
-      if (!GOOGLE_IOS_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID) {
-        Alert.alert(
-          'Google Sign-In Not Configured',
-          'For iOS, you need either:\n' +
-          '1. Add iOS client ID to src/config/googleSignIn.ts, OR\n' +
-          '2. Add GoogleService-Info.plist to your iOS project\n\n' +
-          'Read the iOS guide to learn more.'
-        );
-        return;
-      }
-    } else {
-      // Android needs webClientId
-      if (!GOOGLE_WEB_CLIENT_ID) {
-        Alert.alert(
-          'Google Sign-In Not Configured',
-          'Add your Google web client ID to src/config/googleSignIn.ts before enabling Google authentication.'
-        );
-        return;
-      }
-    }
-
-    if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {
-      console.warn('Google Sign-In: iosClientId not configured. Using webClientId fallback.');
+    // Check if Google Sign-In is configured
+    const webClientId = String(GOOGLE_WEB_CLIENT_ID || '').trim();
+    const iosClientId = String(GOOGLE_IOS_CLIENT_ID || '').trim();
+    const hasWebClientId = webClientId.length > 0;
+    const hasIosClientId = iosClientId.length > 0;
+    
+    // Platform-specific requirements
+    const isConfigured = Platform.OS === 'ios' 
+      ? (hasIosClientId || hasWebClientId)
+      : hasWebClientId;
+    
+    if (!isConfigured) {
+      Alert.alert(
+        'Google Sign-In Not Configured',
+        Platform.OS === 'ios'
+          ? 'For iOS, you need to add GOOGLE_WEB_CLIENT_ID or GOOGLE_IOS_CLIENT_ID to src/config/googleSignIn.ts'
+          : 'Add your Google web client ID to src/config/googleSignIn.ts before enabling Google authentication.'
+      );
+      return;
     }
 
     setIsGoogleLoading(true);
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const userInfo = await GoogleSignin.signIn();
+      // Only check Play Services on Android
+      if (Platform.OS === 'android') {
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
+      
+      const result = await GoogleSignin.signIn();
+      
+      // The response structure from @react-native-google-signin/google-signin
+      // Response has: { data: { idToken, user: { email, name, photo, id } } }
+      const responseData = (result as any).data || result;
+      const idToken = responseData.idToken;
+      const user = responseData.user || {};
+      const email = user.email;
+      const displayName = user.name;
+      const photoURL = user.photo;
+      const uid = user.id;
 
-      if (!userInfo.idToken) {
+      if (!idToken) {
         throw new Error('Google did not return a valid ID token.');
       }
 
-      const email = userInfo.user?.email;
       if (!email) {
         throw new Error('No email address is associated with the selected Google account.');
       }
 
+      // Use Firebase endpoint - it can verify Google ID tokens via Firebase Admin SDK
       const firebaseResponse = await apiService.firebaseAuth({
-        idToken: userInfo.idToken,
+        idToken,
         email,
-        displayName: userInfo.user?.name || undefined,
-        photoURL: userInfo.user?.photo || undefined,
-        uid: userInfo.user?.id || '',
+        displayName,
+        photoURL,
+        uid,
       });
 
       if (firebaseResponse.success && firebaseResponse.data) {
@@ -266,7 +300,7 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
           return (
             <ProviderAuthScreen
               onLogin={handleLogin}
-              onBack={onBackToUserTypeSelection}
+              onBack={onSwitchToCustomerAuth}
               onJoinProvider={handleProviderJoin}
               onForgotPassword={() => navigateTo('forgot-password')}
             />
@@ -285,7 +319,7 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
           return (
             <ProviderAuthScreen
               onLogin={handleLogin}
-              onBack={onBackToUserTypeSelection}
+              onBack={onSwitchToCustomerAuth}
               onJoinProvider={handleProviderJoin}
               onForgotPassword={() => navigateTo('forgot-password')}
             />
@@ -300,8 +334,8 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
             onLogin={handleLogin}
             onSignUp={() => navigateTo('signup')}
             onForgotPassword={() => navigateTo('forgot-password')}
-            onBackToUserTypeSelection={onBackToUserTypeSelection}
             onGoogleSignIn={handleGoogleSignIn}
+            onSwitchToProvider={onSwitchToProviderAuth}
             isGoogleLoading={isGoogleLoading}
           />
         );
@@ -311,8 +345,8 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
           <SignUpScreen
             onSignUp={handleSignUp}
             onLogin={() => navigateTo('login')}
-            onBackToUserTypeSelection={onBackToUserTypeSelection}
             onGoogleSignUp={handleGoogleSignIn}
+            onSwitchToProvider={onSwitchToProviderAuth}
             isGoogleLoading={isGoogleLoading}
           />
         );
@@ -331,8 +365,8 @@ const AuthNavigator: React.FC<AuthNavigatorProps> = ({ onAuthSuccess, onBackToUs
             onLogin={handleLogin}
             onSignUp={() => navigateTo('signup')}
             onForgotPassword={() => navigateTo('forgot-password')}
-            onBackToUserTypeSelection={onBackToUserTypeSelection}
             onGoogleSignIn={handleGoogleSignIn}
+            onSwitchToProvider={onSwitchToProviderAuth}
             isGoogleLoading={isGoogleLoading}
           />
         );

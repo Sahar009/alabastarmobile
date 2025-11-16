@@ -14,7 +14,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from './src/services/api';
 import SplashScreen from './src/screens/SplashScreen';
 import OnboardingNavigator from './src/screens/OnboardingNavigator';
-import UserTypeSelectionScreen from './src/screens/UserTypeSelectionScreen';
 import AuthNavigator from './src/screens/AuthNavigator';
 import ProvidersScreen from './src/screens/ProvidersScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -36,7 +35,6 @@ import BottomNavigation from './src/components/BottomNavigation';
 
 type AppScreen =
   | 'onboarding'
-  | 'user-type-selection'
   | 'auth'
   | 'home'
   | 'location-selection'
@@ -56,14 +54,13 @@ type AppScreen =
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
-  const [userType, setUserType] = useState<'user' | 'provider' | null>(null);
+  const [userType, setUserType] = useState<'user' | 'provider'>('user');
   const [_isAuthenticated, _setIsAuthenticated] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('onboarding');
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [messageRecipientId, setMessageRecipientId] = useState<string | null>(null);
   const [messageBookingId, setMessageBookingId] = useState<string | null>(null);
   const [showSplash, setShowSplash] = useState(true);
@@ -111,6 +108,7 @@ function App() {
         
         // Check if user is a provider and route accordingly
         const isProvider = user?.role === 'provider';
+        setUserType(isProvider ? 'provider' : 'user');
         if (isProvider) {
           setActiveTab('bookings');
           setCurrentScreen('bookings');
@@ -136,22 +134,17 @@ function App() {
         await AsyncStorage.setItem('hasLaunched', 'true');
       } else {
         setIsFirstLaunch(false);
-        setCurrentScreen('user-type-selection');
+        setCurrentScreen('auth');
       }
     } catch (error) {
       console.error('Error checking first launch:', error);
       setIsFirstLaunch(false);
-      setCurrentScreen('user-type-selection');
+      setCurrentScreen('auth');
     }
   };
 
   const handleOnboardingComplete = () => {
     setIsFirstLaunch(false);
-    setCurrentScreen('user-type-selection');
-  };
-
-  const handleUserTypeSelected = (type: 'user' | 'provider') => {
-    setUserType(type);
     setCurrentScreen('auth');
   };
 
@@ -163,9 +156,10 @@ function App() {
     _setIsAuthenticated(true);
     
     // Check both userType and the actual role from userData
-    const isProvider = userType === 'provider' || user?.role === 'provider';
+    const resolvedIsProvider = userType === 'provider' || user?.role === 'provider';
+    setUserType(resolvedIsProvider ? 'provider' : 'user');
     
-    if (isProvider) {
+    if (resolvedIsProvider) {
       // Providers go directly to bookings screen after sign in
       setActiveTab('bookings');
       setCurrentScreen('bookings');
@@ -179,16 +173,20 @@ function App() {
   const handleLogout = () => {
     _setIsAuthenticated(false);
     setUserData(null);
-    setUserType(null);
-    setCurrentScreen('user-type-selection');
+    setUserType('user');
+    setCurrentScreen('auth');
     setSelectedCategory('');
     setSelectedLocation('');
   };
 
-  const handleBackToUserTypeSelection = () => {
-    setUserType(null);
-    setCurrentScreen('user-type-selection');
+  const handleSwitchToAuth = (type: 'user' | 'provider') => {
+    setUserType(type);
+    setCurrentScreen('auth');
   };
+
+  const handleSwitchToCustomerAuth = () => handleSwitchToAuth('user');
+
+  const handleSwitchToProviderAuth = () => handleSwitchToAuth('provider');
 
   const handleBackToHome = () => {
     setCurrentScreen('home');
@@ -201,18 +199,15 @@ function App() {
     setSelectedLocation('');
   };
 
-  const handleSelectCategory = (category: string, search?: string) => {
-    if (category === 'search' && search) {
-      // If it's a search, go directly to providers with search query
-      setSearchQuery(search);
+  const handleSelectCategory = (category: string) => {
+    if (category === 'search') {
       setSelectedCategory('');
       setCurrentScreen('providers');
-    } else {
-      // Normal category selection goes through location selection
-      setSelectedCategory(category);
-      setSearchQuery(''); // Clear search when selecting category
-      setCurrentScreen('location-selection');
+      return;
     }
+
+    setSelectedCategory(category);
+    setCurrentScreen('location-selection');
   };
 
   const handleLocationSelected = async (location: string | any) => {
@@ -309,15 +304,13 @@ function App() {
       case 'onboarding':
         return <OnboardingNavigator onComplete={handleOnboardingComplete} />;
       
-      case 'user-type-selection':
-        return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
-      
       case 'auth':
         return (
           <AuthNavigator 
             onAuthSuccess={handleAuthSuccess} 
-            onBackToUserTypeSelection={handleBackToUserTypeSelection}
-            userType={userType!}
+            onSwitchToCustomerAuth={handleSwitchToCustomerAuth}
+            onSwitchToProviderAuth={handleSwitchToProviderAuth}
+            userType={userType}
           />
         );
       
@@ -330,6 +323,12 @@ function App() {
             onNavigate={(screen: string) => {
               if (screen === 'notifications') {
                 setCurrentScreen('notifications');
+              } else if (screen === 'providers') {
+                setSelectedCategory('');
+                setCurrentScreen('providers');
+              } else if (screen === 'bookings') {
+                setActiveTab('bookings');
+                setCurrentScreen('bookings');
               }
             }}
           />
@@ -352,7 +351,6 @@ function App() {
             onBack={handleBackToLocationSelection}
             selectedCategory={selectedCategory}
             selectedLocation={selectedLocation}
-            searchQuery={searchQuery}
           />
         );
       
@@ -402,6 +400,9 @@ function App() {
                 default:
                   console.log('Navigate to:', screen);
               }
+            }}
+            onProfileUpdated={(updatedUser) => {
+              setUserData(updatedUser);
             }}
           />
         );
@@ -581,7 +582,14 @@ function App() {
         );
       
       default:
-        return <OnboardingNavigator onComplete={handleOnboardingComplete} />;
+        return (
+          <AuthNavigator 
+            onAuthSuccess={handleAuthSuccess} 
+            onSwitchToCustomerAuth={handleSwitchToCustomerAuth}
+            onSwitchToProviderAuth={handleSwitchToProviderAuth}
+            userType={userType}
+          />
+        );
     }
   };
 

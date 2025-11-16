@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  TextInput,
   Alert,
   Image,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
-  Search, 
   Star, 
   Wrench, 
   Zap, 
   Hammer, 
   ChefHat, 
-  LogOut, 
   MapPin, 
   Clock, 
   ArrowLeft,
@@ -33,39 +31,51 @@ import BookingModal from '../components/BookingModal';
 
 const { height } = Dimensions.get('window');
 
+const CATEGORY_ICONS: Record<string, any> = {
+  plumbing: Wrench,
+  electrical: Zap,
+  cleaning: ChefHat,
+  moving: Wrench,
+  ac_repair: Wrench,
+  carpentry: Hammer,
+  painting: Wrench,
+  pest_control: Wrench,
+  laundry: ChefHat,
+  tiling: Wrench,
+  cctv: Wrench,
+  gardening: Wrench,
+  appliance_repair: Wrench,
+  locksmith: Wrench,
+  carpet_cleaning: ChefHat,
+  cooking: ChefHat,
+};
+
 interface ProvidersScreenProps {
   userData: any;
   onLogout: () => void;
   onBack: () => void;
   selectedCategory: string;
   selectedLocation: string;
-  searchQuery?: string;
 }
 
 // Using Provider type from providerService
 type Provider = ProviderType;
 
+const PROVIDERS_PER_PAGE = 10;
+
 const ProvidersScreen: React.FC<ProvidersScreenProps> = ({ 
   userData: _userData, 
-  onLogout, 
+  onLogout: _onLogout, 
   onBack, 
   selectedCategory, 
   selectedLocation,
-  searchQuery: initialSearchQuery = ''
 }) => {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<Provider[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
-  // Update search query when prop changes
-  useEffect(() => {
-    if (initialSearchQuery) {
-      setSearchQuery(initialSearchQuery);
-    }
-  }, [initialSearchQuery]);
   const [_showSort, _setShowSort] = useState(false);
   const [ratingFilter, setRatingFilter] = useState<number | null>(null);
   const [priceFilter, setPriceFilter] = useState<{ min: number; max: number }>({ min: 0, max: 50000 });
@@ -76,124 +86,103 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingProvider, setBookingProvider] = useState<Provider | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activeCategory, setActiveCategory] = useState<string | undefined>(selectedCategory || undefined);
+  const skeletonPulse = useRef(new Animated.Value(0.4)).current;
 
-  const categoryIcons: { [key: string]: any } = {
-    plumbing: Wrench,
-    electrical: Zap,
-    cleaning: ChefHat,
-    moving: Wrench,
-    ac_repair: Wrench,
-    carpentry: Hammer,
-    painting: Wrench,
-    pest_control: Wrench,
-    laundry: ChefHat,
-    tiling: Wrench,
-    cctv: Wrench,
-    gardening: Wrench,
-    appliance_repair: Wrench,
-    locksmith: Wrench,
-    carpet_cleaning: ChefHat,
-    cooking: ChefHat,
-  };
-
-  const getMockProviders = React.useCallback((): Provider[] => {
-    const mockProviders = [
-      {
-        id: '1',
-        user: { fullName: 'John Doe', email: 'john@example.com', phone: '+2348012345678', avatarUrl: '' },
-        businessName: 'John\'s Plumbing Services',
-        category: selectedCategory || 'plumbing',
-        subcategories: ['Pipe Repair', 'Leak Fix', 'Installation'],
-        locationCity: selectedLocation || 'Lagos',
-        locationState: 'Lagos State',
-        ratingAverage: 4.8,
-        ratingCount: 124,
-        startingPrice: 5000,
-        hourlyRate: 2000,
-        bio: 'Professional plumbing services with 10+ years experience',
-        verificationStatus: 'verified',
-        isAvailable: true,
-        estimatedArrival: '30 mins',
-        yearsOfExperience: 10,
-        brandImages: [],
-        isTopListed: true,
-      },
-      {
-        id: '2',
-        user: { fullName: 'Sarah Johnson', email: 'sarah@example.com', phone: '+2348012345679', avatarUrl: '' },
-        businessName: 'Clean & Shine Services',
-        category: selectedCategory || 'cleaning',
-        subcategories: ['House Cleaning', 'Office Cleaning', 'Deep Clean'],
-        locationCity: selectedLocation || 'Lagos',
-        locationState: 'Lagos State',
-        ratingAverage: 4.9,
-        ratingCount: 89,
-        startingPrice: 3500,
-        hourlyRate: 1500,
-        bio: 'Reliable cleaning services for homes and offices',
-        verificationStatus: 'verified',
-        isAvailable: true,
-        estimatedArrival: '45 mins',
-        yearsOfExperience: 5,
-        brandImages: [],
-        isTopListed: false,
-      },
-      {
-        id: '3',
-        user: { fullName: 'Mike Wilson', email: 'mike@example.com', phone: '+2348012345680', avatarUrl: '' },
-        businessName: 'Electric Solutions',
-        category: selectedCategory || 'electrical',
-        subcategories: ['Wiring', 'Repairs', 'Installation'],
-        locationCity: selectedLocation || 'Lagos',
-        locationState: 'Lagos State',
-        ratingAverage: 4.7,
-        ratingCount: 156,
-        startingPrice: 7000,
-        hourlyRate: 3000,
-        bio: 'Certified electrician with safety-first approach',
-        verificationStatus: 'verified',
-        isAvailable: false,
-        estimatedArrival: '1 hour',
-        yearsOfExperience: 8,
-        brandImages: [],
-        isTopListed: true,
-      },
-    ];
-    
-    return mockProviders.filter(provider => 
-      !selectedCategory || provider.category === selectedCategory
-    );
-  }, [selectedCategory, selectedLocation]);
+  useEffect(() => {
+    setActiveCategory(selectedCategory);
+  }, [selectedCategory]);
 
   const fetchProviders = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const filters: ProviderFilters = {
         location: selectedLocation,
-        search: searchQuery || undefined, // Include search query if available
       };
 
+      console.log('[ProvidersScreen] Fetching providers with filters:', {
+        activeCategory,
+        filters,
+        selectedLocation,
+      });
+
       let data;
-      if (selectedCategory) {
-        data = await providerService.getProvidersByCategory(selectedCategory, filters);
+      if (activeCategory) {
+        data = await providerService.getProvidersByCategory(activeCategory, filters);
       } else {
         data = await providerService.searchProviders(filters);
       }
       
-      if (data.success && data.data?.providers) {
-        setProviders(data.data.providers);
+      console.log('[ProvidersScreen] API Response:', {
+        success: data.success,
+        hasProviders: !!data.data?.providers,
+        providerCount: data.data?.providers?.length || 0,
+        totalCount: data.data?.total || 0,
+      });
+
+      if (data.success && data.data?.providers && Array.isArray(data.data.providers)) {
+        const providersData = data.data.providers;
+        
+        // Log provider data including ratings
+        console.log('[ProvidersScreen] Provider data received:', {
+          count: providersData.length,
+          providers: providersData.map((p: any) => ({
+            id: p.id,
+            businessName: p.businessName,
+            category: p.category,
+            ratingAverage: p.ratingAverage,
+            ratingCount: p.ratingCount,
+            startingPrice: p.startingPrice,
+            hourlyRate: p.hourlyRate,
+            isAvailable: p.isAvailable,
+            isTopListed: p.isTopListed,
+            locationCity: p.locationCity,
+            locationState: p.locationState,
+          })),
+        });
+
+        // Log detailed rating information
+        providersData.forEach((provider: any, index: number) => {
+          console.log(`[ProvidersScreen] Provider ${index + 1} (${provider.businessName}):`, {
+            id: provider.id,
+            ratingAverage: provider.ratingAverage,
+            ratingCount: provider.ratingCount,
+            ratingAverageType: typeof provider.ratingAverage,
+            ratingCountType: typeof provider.ratingCount,
+            hasRatings: provider.ratingAverage !== undefined && provider.ratingCount !== undefined,
+          });
+        });
+
+        setProviders(providersData);
+        console.log('[ProvidersScreen] ✅ Using REAL provider data from API');
       } else {
-        // Fallback to mock data
-        setProviders(getMockProviders());
+        console.warn('[ProvidersScreen] ⚠️ No providers in API response, response structure:', {
+          success: data.success,
+          data: data.data,
+          message: (data as any).message || 'No message',
+        });
+        // Only use mock data if API explicitly returns no providers (not on error)
+        if (data.success && (!data.data?.providers || data.data.providers.length === 0)) {
+          console.log('[ProvidersScreen] API returned success but no providers, showing empty state');
+          setProviders([]);
+        } else {
+          console.warn('[ProvidersScreen] API response structure unexpected, using empty array');
+          setProviders([]);
+        }
       }
     } catch (error) {
-      console.error('Error fetching providers:', error);
-      // Fallback to mock data
-      setProviders(getMockProviders());
+      console.error('[ProvidersScreen] ❌ Error fetching providers:', error);
+      console.error('[ProvidersScreen] Error details:', {
+        message: (error as any)?.message,
+        stack: (error as any)?.stack,
+      });
+      // Don't use mock data on error, show empty state instead
+      setProviders([]);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCategory, selectedLocation, searchQuery, getMockProviders]);
+  }, [activeCategory, selectedLocation]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -205,9 +194,17 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   }, [fetchProviders]);
 
   const applyFilters = React.useCallback(() => {
+    console.log('[ProvidersScreen] Applying filters:', {
+      providerCount: providers.length,
+      ratingFilter,
+      priceFilter,
+      availabilityFilter,
+      sortBy,
+      sortOrder,
+    });
+
     // Apply filters using the service
     const filters: Partial<ProviderFilters> = {
-      search: searchQuery || undefined,
       minRating: ratingFilter || undefined,
       minPrice: priceFilter.min || undefined,
       maxPrice: priceFilter.max || undefined,
@@ -216,11 +213,27 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
 
     let filtered = providerService.filterProviders(providers, filters);
     
+    console.log('[ProvidersScreen] After filtering:', {
+      filteredCount: filtered.length,
+      filtersApplied: filters,
+    });
+    
     // Apply sorting
     const sorted = providerService.sortProviders(filtered, sortBy, sortOrder);
     
+    console.log('[ProvidersScreen] After sorting:', {
+      sortedCount: sorted.length,
+      sortBy,
+      sortOrder,
+      sampleRatings: sorted.slice(0, 3).map(p => ({
+        name: p.businessName,
+        rating: p.ratingAverage,
+        count: p.ratingCount,
+      })),
+    });
+    
     setFilteredProviders(sorted);
-  }, [providers, searchQuery, ratingFilter, priceFilter, availabilityFilter, sortBy, sortOrder]);
+  }, [providers, ratingFilter, priceFilter, availabilityFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchProviders();
@@ -230,19 +243,79 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
     applyFilters();
   }, [applyFilters]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredProviders]);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.4,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [skeletonPulse]);
+
+  const displayedProviders = useMemo(
+    () => filteredProviders.slice(0, currentPage * PROVIDERS_PER_PAGE),
+    [filteredProviders, currentPage],
+  );
+
+  const hasMoreProviders = displayedProviders.length < filteredProviders.length;
+
+  const quickFilterOptions = useMemo(() => {
+    const formatLabel = (slug: string) =>
+      slug
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+    return [
+      { label: 'All', value: undefined, icon: Wrench },
+      ...Object.keys(CATEGORY_ICONS).map((key) => ({
+        label: formatLabel(key),
+        value: key,
+        icon: CATEGORY_ICONS[key],
+      })),
+    ];
+  }, []);
+
+  const renderListSkeletons = () =>
+    Array.from({ length: 4 }).map((_, idx) => (
+      <View key={`provider-skeleton-${idx}`} style={[styles.providerCard, styles.skeletonCard]}>
+        <Animated.View
+          style={[
+            styles.listSkeletonOverlay,
+            { opacity: skeletonPulse },
+          ]}
+        />
+      </View>
+    ));
+
   const clearFilters = () => {
-    setSearchQuery('');
     setRatingFilter(null);
     setPriceFilter({ min: 0, max: 50000 });
     setAvailabilityFilter(false);
     setSortBy('rating');
     setSortOrder('desc');
+    setActiveCategory(undefined);
+    setCurrentPage(1);
   };
 
   const getCategoryIcon = (category: string) => {
-    return categoryIcons[category] || Wrench;
+    return CATEGORY_ICONS[category] || Wrench;
   };
-
 
   const handleProviderPress = (provider: Provider) => {
     setSelectedProvider(provider);
@@ -271,14 +344,12 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
-            {searchQuery 
-              ? `Search: "${searchQuery}"` 
-              : selectedCategory 
-                ? `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Providers` 
-                : 'All Providers'}
+            {activeCategory 
+              ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Providers` 
+              : 'All Providers'}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {selectedLocation} • {filteredProviders.length} providers
+            {selectedLocation} • Showing {displayedProviders.length} of {filteredProviders.length} providers
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -317,87 +388,145 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
             />
           }
         >
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Search size={20} color="#94a3b8" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={initialSearchQuery ? `Searching: ${initialSearchQuery}...` : "Search providers..."}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor="#9ca3af"
-                returnKeyType="search"
-              />
-            </View>
-          </View>
+          {/* Quick Filters */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickFiltersContainer}
+          >
+            {quickFilterOptions.map((option) => {
+              const Icon = option.icon || Wrench;
+              const isActive =
+                option.value === activeCategory ||
+                (!option.value && !activeCategory);
+              return (
+                <TouchableOpacity
+                  key={option.label}
+                  style={[
+                    styles.quickFilterChip,
+                    isActive && styles.quickFilterChipActive,
+                  ]}
+                  onPress={() => {
+                    setActiveCategory(option.value);
+                    setCurrentPage(1);
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Icon size={16} color={isActive ? '#ffffff' : '#ec4899'} />
+                  <Text
+                    style={[
+                      styles.quickFilterText,
+                      isActive && styles.quickFilterTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
           {/* Filters */}
-          {showFilters && (
-            <View style={styles.filtersContainer}>
-              <View style={styles.filtersHeader}>
-                <Text style={styles.filtersTitle}>Filters</Text>
-                <TouchableOpacity onPress={() => setShowFilters(false)}>
-                  <X size={20} color="#64748b" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Rating Filter */}
-              <View style={styles.filterSection}>
-                <Text style={styles.filterLabel}>Minimum Rating</Text>
-                <View style={styles.ratingButtons}>
-                  {[4.5, 4.0, 3.5, 3.0].map((rating) => (
-                    <TouchableOpacity
-                      key={rating}
-                      style={[
-                        styles.ratingButton,
-                        ratingFilter === rating && styles.ratingButtonSelected
-                      ]}
-                      onPress={() => setRatingFilter(ratingFilter === rating ? null : rating)}
-                    >
-                      <Star size={16} color={ratingFilter === rating ? "#ffffff" : "#f59e0b"} fill={ratingFilter === rating ? "#ffffff" : "#f59e0b"} />
-                      <Text style={[
-                        styles.ratingButtonText,
-                        ratingFilter === rating && styles.ratingButtonTextSelected
-                      ]}>
-                        {rating}+
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Availability Filter */}
-              <View style={styles.filterSection}>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => setAvailabilityFilter(!availabilityFilter)}
-                >
-                  <View style={[
-                    styles.checkbox,
-                    availabilityFilter && styles.checkboxSelected
-                  ]}>
-                    {availabilityFilter && <X size={12} color="#ffffff" />}
-                  </View>
-                  <Text style={styles.checkboxLabel}>Available Now</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Clear Filters */}
-              <TouchableOpacity style={styles.clearFiltersButton} onPress={clearFilters}>
-                <Text style={styles.clearFiltersText}>Clear All Filters</Text>
+          <View
+            style={[
+              styles.filtersContainer,
+              showFilters && styles.filtersContainerActive,
+            ]}
+          >
+            <View style={styles.filtersToggleRow}>
+              <Text style={styles.filtersTitle}>Filters</Text>
+              <TouchableOpacity
+                style={styles.toggleFiltersButton}
+                onPress={() => setShowFilters(!showFilters)}
+                activeOpacity={0.75}
+              >
+                <SlidersHorizontal size={16} color="#ec4899" />
+                <Text style={styles.toggleFiltersText}>
+                  {showFilters ? 'Hide' : 'Show'}
+                </Text>
               </TouchableOpacity>
             </View>
-          )}
+
+            {showFilters && (
+              <>
+                <View style={styles.filtersHeader}>
+                  <Text style={styles.filtersTitle}>Fine-tune results</Text>
+                  <TouchableOpacity onPress={() => setShowFilters(false)}>
+                    <X size={20} color="#64748b" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Rating Filter */}
+                <View style={styles.filterSection}>
+                  <Text style={styles.filterLabel}>Minimum Rating</Text>
+                  <View style={styles.ratingButtons}>
+                    {[4.5, 4.0, 3.5, 3.0].map((rating) => (
+                      <TouchableOpacity
+                        key={rating}
+                        style={[
+                          styles.ratingButton,
+                          ratingFilter === rating && styles.ratingButtonSelected,
+                        ]}
+                        onPress={() =>
+                          setRatingFilter(ratingFilter === rating ? null : rating)
+                        }
+                      >
+                        <Star
+                          size={16}
+                          color={ratingFilter === rating ? '#ffffff' : '#f59e0b'}
+                          fill={ratingFilter === rating ? '#ffffff' : '#f59e0b'}
+                        />
+                        <Text
+                          style={[
+                            styles.ratingButtonText,
+                            ratingFilter === rating && styles.ratingButtonTextSelected,
+                          ]}
+                        >
+                          {rating}+
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Availability Filter */}
+                <View style={styles.filterSection}>
+                  <TouchableOpacity
+                    style={styles.checkboxContainer}
+                    onPress={() => setAvailabilityFilter(!availabilityFilter)}
+                    activeOpacity={0.75}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        availabilityFilter && styles.checkboxSelected,
+                      ]}
+                    >
+                      {availabilityFilter && <X size={12} color="#ffffff" />}
+                    </View>
+                    <Text style={styles.checkboxLabel}>Available Now</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Clear Filters */}
+                <TouchableOpacity
+                  style={styles.clearFiltersButton}
+                  onPress={clearFilters}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.clearFiltersText}>Clear All Filters</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
 
           {/* Providers List */}
           <View style={styles.providersContainer}>
             {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading providers...</Text>
-              </View>
-            ) : filteredProviders.length > 0 ? (
-              filteredProviders.map((provider) => {
+              <View style={styles.loadingContainer}>{renderListSkeletons()}</View>
+            ) : displayedProviders.length > 0 ? (
+              <>
+              {displayedProviders.map((provider) => {
                 const CategoryIcon = getCategoryIcon(provider.category);
                 return (
                   <TouchableOpacity 
@@ -603,7 +732,17 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                     </View>
                   </TouchableOpacity>
                 );
-              })
+              })}
+              {hasMoreProviders && (
+                <TouchableOpacity
+                  style={styles.loadMoreButton}
+                  onPress={() => setCurrentPage((prev) => prev + 1)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.loadMoreText}>Load more providers</Text>
+                </TouchableOpacity>
+              )}
+              </>
             ) : (
               <View style={styles.noResultsContainer}>
                 <Text style={styles.noResultsTitle}>No providers found</Text>
@@ -617,11 +756,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
             )}
           </View>
 
-          {/* Logout Button */}
-          <TouchableOpacity style={styles.logoutButton} onPress={onLogout} activeOpacity={0.8}>
-            <LogOut size={20} color="#ffffff" />
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
+   
         </ScrollView>
       </View>
 
@@ -746,30 +881,6 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 20,
   },
-  searchContainer: {
-    marginBottom: 20,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#0f172a',
-    marginLeft: 8,
-  },
   filtersContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -780,6 +891,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  filtersContainerActive: {
+    backgroundColor: '#fff7fb',
+    borderColor: '#fce7f3',
+  },
+  filtersToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  toggleFiltersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#fde7f4',
+    borderRadius: 999,
+  },
+  toggleFiltersText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ec4899',
   },
   filtersHeader: {
     flexDirection: 'row',
@@ -1002,6 +1139,45 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontWeight: '500',
   },
+  quickFiltersContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  quickFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  quickFilterChipActive: {
+    backgroundColor: '#ec4899',
+    borderColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  quickFilterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ec4899',
+  },
+  quickFilterTextActive: {
+    color: '#ffffff',
+  },
   providerBrandImages: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1075,6 +1251,33 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  loadMoreButton: {
+    marginTop: 12,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  loadMoreText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  skeletonCard: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#f1f5f9',
+    overflow: 'hidden',
+  },
+  listSkeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(236, 72, 153, 0.08)',
   },
   logoutButton: {
     flexDirection: 'row',
