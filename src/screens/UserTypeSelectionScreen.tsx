@@ -5,13 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  ScrollView,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Calendar, Briefcase, Upload, Wallet } from 'lucide-react-native';
 
-const { height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 interface UserTypeSelectionScreenProps {
   onUserTypeSelected: (type: 'user' | 'provider') => void;
@@ -21,16 +19,6 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
   onUserTypeSelected 
 }) => {
   const [selectedType, setSelectedType] = useState<'user' | 'provider' | null>(null);
-
-  const userFeatures = [
-    { icon: Search, text: 'Search for providers' },
-    { icon: Calendar, text: 'Easy booking' }
-  ];
-
-  const providerFeatures = [
-    { icon: Upload, text: 'Upload services' },
-    { icon: Wallet, text: 'Earn in Naira (₦)' }
-  ];
 
   const handleTypeSelection = (type: 'user' | 'provider') => {
     setSelectedType(type);
@@ -55,10 +43,7 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
         <View style={[styles.circle, styles.circle3]} />
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
@@ -68,6 +53,7 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
               resizeMode="contain"
             />
           </View>
+          
           <Text style={styles.title}>Welcome to Alabastar</Text>
           <Text style={styles.subtitle}>
             Choose your role to continue
@@ -86,12 +72,16 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
             activeOpacity={0.8}
           >
             <View style={styles.cardContent}>
-              {/* Icon */}
-              <View style={[
-                styles.iconContainer,
-                selectedType === 'user' && styles.iconContainerSelected
-              ]}>
-                <Text style={styles.iconEmoji}>👥</Text>
+              {/* Image */}
+              <View style={styles.imageContainer}>
+                <Image
+                  source={require('../../assets/userselect.png')}
+                  style={styles.cardImage}
+                  resizeMode="contain"
+                />
+                {selectedType === 'user' && (
+                  <View style={styles.imageOverlay} />
+                )}
               </View>
 
               {/* Title */}
@@ -106,26 +96,6 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
               <Text style={styles.cardDescription}>
                 Search for providers and book services
               </Text>
-
-              {/* Features */}
-              <View style={styles.featuresContainer}>
-                {userFeatures.map((feature, index) => (
-                  <View key={index} style={styles.featureItem}>
-                    <View style={[
-                      styles.featureIcon,
-                      selectedType === 'user' && styles.featureIconSelected
-                    ]}>
-                      <feature.icon size={16} color="#ec4899" />
-                    </View>
-                    <Text style={[
-                      styles.featureText,
-                      selectedType === 'user' && styles.featureTextSelected
-                    ]}>
-                      {feature.text}
-                    </Text>
-                  </View>
-                ))}
-              </View>
 
               {/* Selection indicator */}
               {selectedType === 'user' && (
@@ -146,12 +116,16 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
             activeOpacity={0.8}
           >
             <View style={styles.cardContent}>
-              {/* Icon */}
-              <View style={[
-                styles.iconContainer,
-                selectedType === 'provider' && styles.iconContainerSelected
-              ]}>
-                <Briefcase size={32} color="#ec4899" />
+              {/* Image */}
+              <View style={styles.imageContainer}>
+                <Image
+                  source={require('../../assets/providerselect.png')}
+                  style={styles.cardImage}
+                  resizeMode="contain"
+                />
+                {selectedType === 'provider' && (
+                  <View style={styles.imageOverlay} />
+                )}
               </View>
 
               {/* Title */}
@@ -166,26 +140,6 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
               <Text style={styles.cardDescription}>
                 Upload services and earn money
               </Text>
-
-              {/* Features */}
-              <View style={styles.featuresContainer}>
-                {providerFeatures.map((feature, index) => (
-                  <View key={index} style={styles.featureItem}>
-                    <View style={[
-                      styles.featureIcon,
-                      selectedType === 'provider' && styles.featureIconSelected
-                    ]}>
-                      <feature.icon size={16} color="#ec4899" />
-                    </View>
-                    <Text style={[
-                      styles.featureText,
-                      selectedType === 'provider' && styles.featureTextSelected
-                    ]}>
-                      {feature.text}
-                    </Text>
-                  </View>
-                ))}
-              </View>
 
               {/* Selection indicator */}
               {selectedType === 'provider' && (
@@ -213,21 +167,11 @@ const UserTypeSelectionScreen: React.FC<UserTypeSelectionScreenProps> = ({
               onPress={handleContinue}
               activeOpacity={0.8}
             >
-              <Text style={styles.continueButtonText}>Continue to Sign In →</Text>
+              <Text style={styles.continueButtonText}>Continue →</Text>
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Don't have an account?{' '}
-            <Text style={styles.footerLink}>Become a Provider</Text>
-            {' '}or{' '}
-            <Text style={styles.footerLink}>Register as Customer</Text>
-          </Text>
-        </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
@@ -243,179 +187,160 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#fdf2f8', // Light pink background
+    backgroundColor: '#fdf2f8',
   },
   circle: {
     position: 'absolute',
     borderRadius: 1000,
-    opacity: 0.1,
+    opacity: 0.08,
   },
   circle1: {
-    width: 200,
-    height: 200,
-    backgroundColor: '#ec4899', // Pink-500
-    top: -100,
-    right: -50,
+    width: width * 0.8,
+    height: width * 0.8,
+    backgroundColor: '#ec4899',
+    top: -width * 0.3,
+    right: -width * 0.2,
   },
   circle2: {
-    width: 150,
-    height: 150,
-    backgroundColor: '#f97316', // Orange-500
-    bottom: 100,
-    left: -75,
+    width: width * 0.6,
+    height: width * 0.6,
+    backgroundColor: '#f97316',
+    bottom: -width * 0.2,
+    left: -width * 0.3,
   },
   circle3: {
-    width: 100,
-    height: 100,
-    backgroundColor: '#ec4899', // Pink-500
-    top: height * 0.3,
-    right: 50,
+    width: width * 0.4,
+    height: width * 0.4,
+    backgroundColor: '#ec4899',
+    top: height * 0.35,
+    right: width * 0.15,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 20,
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
+    justifyContent: 'space-between',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 30,
     marginTop: 10,
+    marginBottom: 16,
   },
   logoContainer: {
-    marginBottom: 15,
+    marginBottom: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoImage: {
-    width: 200,
-    height: 80,
+    width: 160,
+    height: 64,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#0f172a',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     textAlign: 'center',
     fontWeight: '500',
-    lineHeight: 18,
-    paddingHorizontal: 20,
+    lineHeight: 16,
   },
   cardsContainer: {
+    flex: 1,
+    justifyContent: 'center',
     gap: 16,
-    marginBottom: 24,
+    marginVertical: 10,
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
   },
   cardSelected: {
     borderColor: '#ec4899',
+    borderWidth: 3,
     shadowColor: '#ec4899',
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
     transform: [{ scale: 1.02 }],
   },
   cardContent: {
-    padding: 20,
+    padding: 16,
+    position: 'relative',
+    alignItems: 'center',
+  },
+  imageContainer: {
+    width: width * 0.7,
+    height: height * 0.2,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#f8fafc',
     position: 'relative',
   },
-  iconContainer: {
-    width: 60,
-    height: 60,
+  cardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(236, 72, 153, 0.1)',
     borderRadius: 16,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    alignSelf: 'center',
-  },
-  iconContainerSelected: {
-    backgroundColor: '#ec4899',
-    shadowColor: '#ec4899',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  iconEmoji: {
-    fontSize: 24,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
     color: '#0f172a',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   cardTitleSelected: {
     color: '#ec4899',
   },
   cardDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  featuresContainer: {
-    gap: 8,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  featureIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#f8fafc',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  featureIconSelected: {
-    backgroundColor: '#fdf2f8',
-  },
-  featureIconText: {
-    fontSize: 16,
-  },
-  featureText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-    flex: 1,
-  },
-  featureTextSelected: {
-    color: '#374151',
+    lineHeight: 16,
   },
   selectionIndicator: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
+    top: 12,
+    right: 12,
+    width: 28,
+    height: 28,
     backgroundColor: '#ec4899',
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#ec4899',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 4,
   },
   checkmark: {
     color: '#ffffff',
@@ -426,7 +351,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'center',
-    marginBottom: 24,
+    marginTop: 10,
+    marginBottom: 10,
   },
   backButton: {
     paddingHorizontal: 24,
@@ -435,9 +361,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
+    flex: 1,
+    maxWidth: 120,
+    alignItems: 'center',
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#64748b',
   },
@@ -454,24 +383,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  continueButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  footer: {
+    flex: 1,
     alignItems: 'center',
   },
-  footerText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  footerLink: {
-    color: '#ec4899',
+  continueButtonText: {
+    fontSize: 15,
     fontWeight: '600',
+    color: '#ffffff',
   },
 });
 

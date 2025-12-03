@@ -8,25 +8,29 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Star, X, Send } from 'lucide-react-native';
+import { Star, X, Send, CheckCircle } from 'lucide-react-native';
 import { apiService } from '../services/api';
 
 interface RatingScreenProps {
-  isVisible: boolean;
-  booking: any;
+  booking: {
+    id: string;
+    scheduledAt: string;
+    providerProfile?: {
+      businessName?: string;
+      User?: {
+        fullName?: string;
+      };
+    };
+  };
   onClose: () => void;
-  onSuccess: (rating: number, comment?: string) => void;
+  onSuccess?: () => void;
 }
 
-const RatingScreen: React.FC<RatingScreenProps> = ({
-  isVisible,
-  booking,
-  onClose,
-  onSuccess,
-}) => {
+const RatingScreen: React.FC<RatingScreenProps> = ({ booking, onClose, onSuccess }) => {
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
@@ -40,34 +44,52 @@ const RatingScreen: React.FC<RatingScreenProps> = ({
     5: 'Excellent',
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
   const handleSubmit = async () => {
     if (rating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+      Alert.alert('Rating Required', 'Please select a rating before submitting.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const response = await apiService.submitReview(
-        booking.id,
-        rating,
-        comment.trim() || undefined
-      );
+      const response = await apiService.submitReview({
+        bookingId: booking.id,
+        rating: rating,
+        comment: comment.trim() || null,
+      });
 
       if (response.success) {
-        Alert.alert('Success', 'Thank you for your review!');
-        handleClose();
-        onSuccess(rating, comment.trim() || undefined);
+        Alert.alert(
+          'Thank You!',
+          'Your review has been submitted successfully.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                onSuccess?.();
+                onClose();
+              },
+            },
+          ]
+        );
       } else {
-        Alert.alert('Error', response.message || 'Failed to submit review');
+        Alert.alert('Error', response.message || 'Failed to submit review. Please try again.');
       }
     } catch (error: any) {
       console.error('Error submitting review:', error);
-      const apiMessage =
-        error?.response?.data?.message ||
-        error?.message ||
-        'Failed to submit review';
-      Alert.alert('Error', apiMessage);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to submit review. Please check your connection and try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -79,270 +101,308 @@ const RatingScreen: React.FC<RatingScreenProps> = ({
     onClose();
   };
 
+  const providerName = booking.providerProfile?.businessName || 
+                       booking.providerProfile?.User?.fullName || 
+                       'this provider';
+
   return (
-    <Modal
-      visible={isVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={handleClose}
-    >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.title}>Rate Your Experience</Text>
-              <Text style={styles.subtitle}>
-                How was your experience with {booking?.providerProfile?.User?.fullName || 'this provider'}?
-              </Text>
-            </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <X size={24} color="#64748b" />
-            </TouchableOpacity>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>Rate Your Experience</Text>
+            <Text style={styles.subtitle}>
+              How was your experience with {providerName}?
+            </Text>
+          </View>
+          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+            <X size={24} color="#64748b" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Booking Info Card */}
+          <View style={styles.bookingCard}>
+            <Text style={styles.bookingLabel}>Booking Details</Text>
+            <Text style={styles.bookingService}>
+              {booking.providerProfile?.businessName || 'Service'}
+            </Text>
+            <Text style={styles.bookingDate}>
+              {formatDate(booking.scheduledAt)} • {providerName}
+            </Text>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Booking Info */}
-            <View style={styles.bookingInfo}>
-              <View style={styles.providerCard}>
-                <View style={styles.providerIcon}>
-                  <Text style={styles.providerIconText}>
-                    {booking?.providerProfile?.businessName?.[0] || '?'}
-                  </Text>
-                </View>
-                <View style={styles.providerDetails}>
-                  <Text style={styles.providerName}>
-                    {booking?.providerProfile?.businessName || 'Unknown Provider'}
-                  </Text>
-                  <Text style={styles.providerCategory}>
-                    {booking?.providerProfile?.category || 'Service'}
-                  </Text>
-                </View>
-              </View>
+          {/* Rating Stars */}
+          <View style={styles.ratingSection}>
+            <Text style={styles.ratingLabel}>
+              How would you rate this service? <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={styles.starsContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setRating(star)}
+                  style={styles.starButton}
+                  activeOpacity={0.7}
+                >
+                  <Star
+                    size={48}
+                    color={
+                      star <= (hoverRating || rating)
+                        ? '#fbbf24'
+                        : '#cbd5e1'
+                    }
+                    fill={star <= (hoverRating || rating) ? '#fbbf24' : 'transparent'}
+                  />
+                </TouchableOpacity>
+              ))}
             </View>
+            {rating > 0 && (
+              <Text style={styles.ratingLabelText}>{ratingLabels[rating]}</Text>
+            )}
+          </View>
 
-            {/* Rating Section */}
-            <View style={styles.ratingSection}>
-              <Text style={styles.sectionTitle}>Your Rating</Text>
-              
-              <View style={styles.starsContainer}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity
-                    key={star}
-                    onPress={() => setRating(star)}
-                    style={styles.starButton}
-                  >
-                    <Star
-                      size={40}
-                      color="#f59e0b"
-                      fill={star <= rating ? '#f59e0b' : 'transparent'}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {/* Comment Section */}
+          <View style={styles.commentSection}>
+            <Text style={styles.commentLabel}>Share your experience (optional)</Text>
+            <TextInput
+              style={styles.commentInput}
+              value={comment}
+              onChangeText={(text) => {
+                if (text.length <= 500) {
+                  setComment(text);
+                }
+              }}
+              placeholder="Tell others about your experience..."
+              placeholderTextColor="#94a3b8"
+              multiline
+              numberOfLines={6}
+              maxLength={500}
+              textAlignVertical="top"
+            />
+            <Text style={styles.charCount}>{comment.length}/500 characters</Text>
+          </View>
+        </ScrollView>
 
-              {rating > 0 && (
-                <View style={styles.ratingLabelContainer}>
-                  <Text style={styles.ratingLabel}>{ratingLabels[rating]}</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Comment Section */}
-            <View style={styles.commentSection}>
-              <Text style={styles.sectionTitle}>Add a Comment (Optional)</Text>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Tell us about your experience..."
-                placeholderTextColor="#94a3b8"
-                multiline
-                numberOfLines={6}
-                value={comment}
-                onChangeText={setComment}
-                maxLength={500}
-              />
-              <Text style={styles.characterCount}>
-                {comment.length}/500
-              </Text>
-            </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[styles.submitButton, rating === 0 && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={isSubmitting || rating === 0}
-              activeOpacity={0.7}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Send size={20} color="#ffffff" />
-                  <Text style={styles.submitButtonText}>Submit Review</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.cancelButton}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            style={[styles.submitButton, (isSubmitting || rating === 0) && styles.submitButtonDisabled]}
+            disabled={isSubmitting || rating === 0}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <>
+                <Send size={20} color="#ffffff" />
+                <Text style={styles.submitButtonText}>Submit Review</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
-      </SafeAreaView>
-    </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: '#f8fafc',
   },
-  modalContent: {
+  keyboardView: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: 50,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  headerTextContainer: {
+  headerContent: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 16,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#0f172a',
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 14,
     color: '#64748b',
+    lineHeight: 20,
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    padding: 8,
+    borderRadius: 12,
     backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
+    gap: 24,
+  },
+  bookingCard: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 20,
     padding: 20,
-  },
-  bookingInfo: {
-    marginBottom: 24,
-  },
-  providerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  providerIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#ec4899',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  bookingLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  providerIconText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  providerDetails: {
-    flex: 1,
-  },
-  providerName: {
-    fontSize: 16,
+  bookingService: {
+    fontSize: 17,
     fontWeight: '600',
     color: '#0f172a',
     marginBottom: 4,
   },
-  providerCategory: {
+  bookingDate: {
     fontSize: 14,
     color: '#64748b',
-    textTransform: 'capitalize',
+    lineHeight: 20,
   },
   ratingSection: {
-    marginBottom: 24,
-    alignItems: 'center',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginBottom: 16,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  starButton: {
-    padding: 4,
-  },
-  ratingLabelContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#fef3c7',
-    borderRadius: 20,
+    gap: 16,
   },
   ratingLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#d97706',
+    color: '#0f172a',
+  },
+  required: {
+    color: '#ef4444',
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  starButton: {
+    padding: 4,
+  },
+  ratingLabelText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#64748b',
+    textAlign: 'center',
   },
   commentSection: {
-    marginBottom: 24,
+    gap: 12,
+  },
+  commentLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0f172a',
   },
   commentInput: {
-    minHeight: 120,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
     padding: 16,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
     fontSize: 15,
     color: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    minHeight: 120,
     textAlignVertical: 'top',
-    marginBottom: 8,
   },
-  characterCount: {
+  charCount: {
     fontSize: 12,
     color: '#94a3b8',
     textAlign: 'right',
   },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#475569',
+  },
   submitButton: {
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 16,
-    backgroundColor: '#ec4899',
     borderRadius: 16,
-    marginBottom: 32,
+    backgroundColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitButtonDisabled: {
-    backgroundColor: '#cbd5e1',
+    opacity: 0.5,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+    letterSpacing: 0.2,
   },
 });
 
 export default RatingScreen;
-

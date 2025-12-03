@@ -12,8 +12,8 @@ import {
   Alert,
   Animated,
   ImageSourcePropType,
-  AppState,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Search, 
@@ -45,7 +45,7 @@ import {
 import ProviderProfileModal from '../components/ProviderProfileModal';
 import BookingModal from '../components/BookingModal';
 import { type Provider as ProviderType } from '../services/providerService';
-import { API_BASE_URL, apiService } from '../services/api';
+import { API_BASE_URL } from '../services/api';
 
 interface HomeScreenProps {
   onCategorySelect: (category: string, search?: string) => void;
@@ -87,12 +87,6 @@ interface FeaturedService {
   };
 }
 
-// Helper function to resolve user data structure
-const resolveUser = (data: any) => {
-  if (!data) return null;
-  return data.user ? data.user : data;
-};
-
 const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, selectedLocation = 'Lagos', onNavigate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -105,16 +99,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
   const [unreadCount, setUnreadCount] = useState(0);
   const [adImages, setAdImages] = useState<ImageSourcePropType[]>([]);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  
-  // Resolve user data to get name - updates when userData changes
-  const userName = useMemo(() => {
-    const user = resolveUser(userData);
-    return user?.fullName || 'User';
-  }, [userData]);
   const [isLoadingAds, setIsLoadingAds] = useState(false);
   const adFadeAnim = useRef(new Animated.Value(0)).current;
-  const skeletonPulse = useRef(new Animated.Value(0.5));
   const [popularServices, setPopularServices] = useState<Array<{
     name: string;
     category: string;
@@ -153,10 +139,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         electrical: require('../../assets/mechanic2d.png'),
         cleaning: require('../../assets/cleaner2d.png'),
         moving: require('../../assets/mover2d.png'),
-        ac_repair: require('../../assets/ac2d.jpg'),
         carpentry: require('../../assets/carpenter2d.png'),
-        painting: require('../../assets/painter2d.jpg'),
-        pest_control: require('../../assets/electrician2d.jpg'),
+        painting: require('../../assets/painter2d.png'),
+        pest_control: require('../../assets/electrician2d.png'),
         laundry: require('../../assets/laundry2d.png'),
         pharmaceutical: require('../../assets/pharmacy2d.png'),
         cctv: require('../../assets/cctv2d.png'),
@@ -328,14 +313,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
       image: '/images/mover2d.png',
       description: 'Moving services, packing'
     },
-    { 
-      id: 'ac_repair', 
-      name: 'AC Repair', 
-      icon: Snowflake, 
-      color: '#06b6d4',
-      image: '/images/ac2d.png',
-      description: 'Air conditioning repair & maintenance'
-    },
+   
     { 
       id: 'carpentry', 
       name: 'Carpentry', 
@@ -630,23 +608,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
   }, []);
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonPulse.current, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(skeletonPulse.current, {
-          toValue: 0.4,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start();
-  }, []);
-
-  useEffect(() => {
     if (adImages.length === 0) {
       setCurrentAdIndex(0);
       return;
@@ -676,71 +637,46 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     }).start();
   }, [currentAdIndex, adImages, adFadeAnim]);
 
-  const renderSkeletonCards = useCallback(
-    (count: number, prefix: string) =>
-      Array.from({ length: count }).map((_, idx) => (
-        <View key={`${prefix}-${idx}`} style={[styles.featuredCard, styles.skeletonCard]}>
-          <Animated.View style={[styles.skeletonOverlay, { opacity: skeletonPulse.current }]} />
-        </View>
-      )),
-    [],
-  );
-
   // Fetch unread notification count
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      // Use apiService which automatically loads token if missing
-      await apiService.loadToken();
-      const response: any = await apiService.getUnreadNotificationCount();
-      
-      // Backend returns { success: true, count: number }
-      if (response.success) {
-        // Check both response.count (backend format) and response.data.unreadCount (alternative format) for compatibility
-        const count = response.count ?? response.data?.unreadCount ?? 0;
-        setUnreadCount(count);
-        console.log('Unread notification count:', count);
-      } else {
-        setUnreadCount(0);
-      }
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
-      setUnreadCount(0);
-      // Don't show error to user, just log it
-    }
-  }, []);
-
   useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const base = 'http://localhost:8000';
+        const token = await AsyncStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${base}/api/notifications/unread-count`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUnreadCount(data.data?.unreadCount || 0);
+        }
+      } catch (error) {
+        console.error('Error fetching unread count:', error);
+      }
+    };
+
     if (userData) {
       fetchUnreadCount();
-      // Refresh unread count periodically (every 30 seconds)
-      const interval = setInterval(fetchUnreadCount, 30000);
-      
-      // Refresh when app comes to foreground
-      const subscription = AppState.addEventListener('change', (nextAppState) => {
-        if (nextAppState === 'active') {
-          fetchUnreadCount();
-        }
-      });
-      
-      return () => {
-        clearInterval(interval);
-        subscription.remove();
-      };
     }
-  }, [userData, fetchUnreadCount]);
+  }, [userData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await Promise.all([
         fetchFeaturedServices(),
-        fetchCategories(),
-        fetchUnreadCount()
+        fetchCategories()
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [fetchFeaturedServices, fetchCategories, fetchUnreadCount]);
+  }, [fetchFeaturedServices, fetchCategories]);
 
 
   const getCategoryIcon = (category: string) => {
@@ -859,141 +795,163 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     }
 
     allImages = Array.from(new Set(allImages)).slice(0, 3);
-              
-              return (
-              <TouchableOpacity 
+
+    return (
+      <TouchableOpacity 
         key={`${keyPrefix}-${service.id}`}
-                    style={styles.featuredCard}
-                    onPress={() => handleFeaturedServicePress(service)}
-                    activeOpacity={0.8}
-                  >
-                    {service.isTopListed && (
-                      <View style={styles.featuredBadgeCard}>
-                        <View style={styles.featuredBadgeContentCard}>
-                          <Zap size={14} color="#ffffff" fill="#ffffff" />
-                          <Text style={styles.featuredBadgeTextCard}>FEATURED</Text>
-                        </View>
-                      </View>
-                    )}
-
-                    <View style={styles.featuredProviderInfo}>
-                      <View style={styles.featuredProviderIconContainer}>
-                        {(() => {
-                          if (service.user?.avatarUrl || service.User?.avatarUrl) {
-                            return (
-                          <Image
-                                source={{ uri: service.user?.avatarUrl || service.User?.avatarUrl }}
-                                style={styles.featuredProviderAvatarImage}
-                            resizeMode="cover"
-                          />
-                            );
-                          }
-                          if (service.brandImages && service.brandImages.length > 0) {
-                            const firstImg = service.brandImages[0];
-                            if (firstImg && typeof firstImg === 'string') {
-                              return (
-                                <Image
-                                  source={{ uri: firstImg }}
-                                  style={styles.featuredProviderAvatarImage}
-                                  resizeMode="cover"
-                                />
-                              );
-                            }
-                          }
-                          if (service.portfolio && service.portfolio.length > 0 && service.portfolio[0]) {
-                            return (
-                              <Image
-                                source={{ uri: service.portfolio[0] }}
-                                style={styles.featuredProviderAvatarImage}
-                                resizeMode="cover"
-                              />
-                            );
-                          }
-                          return <CategoryIcon size={32} color="#ec4899" />;
-                        })()}
-                      </View>
-
-                      <View style={styles.featuredProviderDetails}>
-                        <Text style={styles.featuredProviderName}>{service.businessName}</Text>
-                        <Text style={styles.featuredProviderOwner}>
-                          by {service.user?.fullName || service.User?.fullName || 'Provider'}
-                        </Text>
-                        <View style={styles.featuredProviderRating}>
-                          <Star size={16} color="#fbbf24" fill="#fbbf24" />
-                          <Text style={styles.featuredRatingTextCard}>{service.ratingAverage.toFixed(1)}</Text>
-                          <Text style={styles.featuredReviewsTextCard}>({service.ratingCount} reviews)</Text>
-                        </View>
-                        <View style={styles.featuredProviderLocation}>
-                          <MapPin size={14} color="#64748b" />
-                          <Text style={styles.featuredLocationTextCard}>
-                            {service.locationCity}{service.locationState ? `, ${service.locationState}` : ''}
-                          </Text>
-                        </View>
-                        {service.isAvailable && (
-                          <View style={styles.featuredAvailabilityContainer}>
-                            <Clock size={14} color="#10b981" />
-                            <Text style={styles.featuredAvailabilityText}>{service.estimatedArrival}</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-
-        {subcats.length > 0 && (
-                        <View style={styles.featuredSubcategoriesContainer}>
-                          {subcats.slice(0, 3).map((subcat: string, idx: number) => {
-                            const formattedName = subcat
-                              .split('_')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                              .join(' ');
-                            return (
-                              <View key={idx} style={styles.featuredSubcategoryChip}>
-                                <Text style={styles.featuredSubcategoryText}>{formattedName}</Text>
-                              </View>
-                            );
-                          })}
-                          {subcats.length > 3 && (
-                            <View style={styles.featuredSubcategoryChip}>
-                              <Text style={styles.featuredSubcategoryText}>+{subcats.length - 3}</Text>
-                            </View>
-                          )}
-                        </View>
+        style={styles.featuredCard}
+        onPress={() => handleFeaturedServicePress(service)}
+        activeOpacity={0.9}
+      >
+        {/* Premium Badge */}
+        {service.isTopListed && (
+          <View style={styles.featuredBadgeCard}>
+            <View style={styles.featuredBadgeContentCard}>
+              <Zap size={12} color="#ffffff" fill="#ffffff" />
+              <Text style={styles.featuredBadgeTextCard}>FEATURED</Text>
+            </View>
+          </View>
         )}
-                    
-                    <View style={styles.featuredProviderBrandImages}>
-                          <View style={styles.featuredBrandImageGrid}>
-                            {allImages.length > 0 ? (
-                              <>
-                                {allImages.map((image, index) => (
-                                  <View key={index} style={styles.featuredBrandImageContainer}>
-                                <Image
-                                      source={{ uri: image }}
-                                      style={styles.featuredBrandImage}
-                                  resizeMode="cover"
-                                />
-                              </View>
-                            ))}
-                                {Array.from({ length: 3 - allImages.length }).map((_, i) => (
-                                  <View key={`placeholder-${i}`} style={styles.featuredBrandImagePlaceholder}>
-                                    <CategoryIcon size={20} color="#94a3b8" />
-                              </View>
-                                ))}
-                              </>
-                            ) : (
-                              [1, 2, 3].map((i) => (
-                                <View key={i} style={styles.featuredBrandImagePlaceholder}>
-                                  <CategoryIcon size={20} color="#94a3b8" />
-                              </View>
-                              ))
-                        )}
-                      </View>
-                      
-                      <View style={[
-                        styles.featuredAvailabilityBadge,
-                        service.isAvailable ? styles.featuredAvailabilityBadgeAvailable : styles.featuredAvailabilityBadgeBusy
-                      ]}>
-                        <Text style={styles.featuredAvailabilityBadgeText}>
-                          {service.isAvailable ? 'Available' : 'Busy'}
-                        </Text>
+
+        {/* Header Section with Avatar and Info */}
+        <View style={styles.featuredCardHeader}>
+          <View style={styles.featuredProviderAvatarWrapper}>
+            {(() => {
+              if (service.user?.avatarUrl || service.User?.avatarUrl) {
+                return (
+                  <Image
+                    source={{ uri: service.user?.avatarUrl || service.User?.avatarUrl }}
+                    style={styles.featuredProviderAvatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              }
+              if (service.brandImages && service.brandImages.length > 0) {
+                const firstImg = service.brandImages[0];
+                if (firstImg && typeof firstImg === 'string') {
+                  return (
+                    <Image
+                      source={{ uri: firstImg }}
+                      style={styles.featuredProviderAvatarImage}
+                      resizeMode="cover"
+                    />
+                  );
+                }
+              }
+              if (service.portfolio && service.portfolio.length > 0 && service.portfolio[0]) {
+                return (
+                  <Image
+                    source={{ uri: service.portfolio[0] }}
+                    style={styles.featuredProviderAvatarImage}
+                    resizeMode="cover"
+                  />
+                );
+              }
+              return (
+                <View style={styles.featuredProviderIconFallback}>
+                  <CategoryIcon size={28} color="#ec4899" />
+                </View>
+              );
+            })()}
+            {service.isAvailable && (
+              <View style={styles.onlineIndicator} />
+            )}
+          </View>
+
+          <View style={styles.featuredProviderInfo}>
+            <Text style={styles.featuredProviderName} numberOfLines={1}>
+              {service.businessName}
+            </Text>
+            <Text style={styles.featuredProviderOwner} numberOfLines={1}>
+              {service.user?.fullName || service.User?.fullName || 'Provider'}
+            </Text>
+            <View style={styles.featuredProviderMetaRow}>
+              <View style={styles.featuredProviderRating}>
+                <Star size={14} color="#fbbf24" fill="#fbbf24" />
+                <Text style={styles.featuredRatingTextCard}>{service.ratingAverage.toFixed(1)}</Text>
+                <Text style={styles.featuredReviewsTextCard}>({service.ratingCount})</Text>
+              </View>
+              {service.isAvailable && (
+                <View style={styles.featuredAvailabilityContainer}>
+                  <Clock size={12} color="#10b981" />
+                  <Text style={styles.featuredAvailabilityText}>{service.estimatedArrival}</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.featuredProviderLocation}>
+              <MapPin size={12} color="#64748b" />
+              <Text style={styles.featuredLocationTextCard} numberOfLines={1}>
+                {service.locationCity}{service.locationState ? `, ${service.locationState}` : ''}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Subcategories Tags */}
+        {subcats.length > 0 && (
+          <View style={styles.featuredSubcategoriesContainer}>
+            {subcats.slice(0, 2).map((subcat: string, idx: number) => {
+              const formattedName = subcat
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+              return (
+                <View key={idx} style={styles.featuredSubcategoryChip}>
+                  <Text style={styles.featuredSubcategoryText}>{formattedName}</Text>
+                </View>
+              );
+            })}
+            {subcats.length > 2 && (
+              <View style={styles.featuredSubcategoryChip}>
+                <Text style={styles.featuredSubcategoryText}>+{subcats.length - 2}</Text>
+              </View>
+            )}
+          </View>
+        )}
+        
+        {/* Portfolio Gallery */}
+        <View style={styles.featuredProviderBrandImages}>
+          <View style={styles.featuredBrandImageGrid}>
+            {allImages.length > 0 ? (
+              <>
+                {allImages.slice(0, 3).map((image, index) => (
+                  <View key={index} style={styles.featuredBrandImageContainer}>
+                    <Image
+                      source={{ uri: image }}
+                      style={styles.featuredBrandImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+                {Array.from({ length: 3 - allImages.length }).map((_, i) => (
+                  <View key={`placeholder-${i}`} style={styles.featuredBrandImagePlaceholder}>
+                    <CategoryIcon size={18} color="#cbd5e1" />
+                  </View>
+                ))}
+              </>
+            ) : (
+              [1, 2, 3].map((i) => (
+                <View key={i} style={styles.featuredBrandImagePlaceholder}>
+                  <CategoryIcon size={18} color="#cbd5e1" />
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        {/* Footer with Availability Badge */}
+        <View style={styles.featuredCardFooter}>
+          <View style={[
+            styles.featuredAvailabilityBadge,
+            service.isAvailable ? styles.featuredAvailabilityBadgeAvailable : styles.featuredAvailabilityBadgeBusy
+          ]}>
+            <View style={[
+              styles.availabilityDot,
+              service.isAvailable ? styles.availabilityDotActive : styles.availabilityDotInactive
+            ]} />
+            <Text style={styles.featuredAvailabilityBadgeText}>
+              {service.isAvailable ? 'Available Now' : 'Currently Busy'}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -1022,7 +980,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
             <View>
               <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'},</Text>
               <Text style={styles.userName}>
-                {userName}!
+                {userData?.role === 'provider' 
+                  ? 'Provider' 
+                  : userData?.user?.fullName || 'User'}!
               </Text>
             </View>
             <View style={styles.headerRight}>
@@ -1042,36 +1002,28 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                 onPress={() => onNavigate?.('notifications')}
               >
                 <Bell size={20} color="#ec4899" />
-                {unreadCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                  </View>
-                )}
+                <View style={[styles.badge, unreadCount === 0 && styles.badgeEmpty]}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.subtitle}>Find trusted businesses and professionals</Text>
+          <Text style={styles.subtitle}>Find trusted pros for any job</Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBarContainer}>
-          <View style={[styles.searchBar, isSearchFocused && styles.searchBarFocused]}>
-            <Search size={20} color={isSearchFocused ? "#ec4899" : "#94a3b8"} />
+          <View style={styles.searchBar}>
+            <Search size={20} color="#94a3b8" />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search for services..."
                 placeholderTextColor="#9ca3af"
                 value={searchQuery}
                 onChangeText={handleSearchChange}
-                onFocus={() => {
-                  setIsSearchFocused(true);
-                  handleSearchFocus();
-                }}
-                onBlur={() => {
-                  setIsSearchFocused(false);
-                  handleSearchBlur();
-                }}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
                 returnKeyType="search"
                 onSubmitEditing={handleSearchPress}
               />
@@ -1170,10 +1122,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                       <ArrowRight size={16} color={palette.base} />
                         </View>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+              </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
 
         {/* Promotional Spotlight */}
@@ -1212,33 +1164,33 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                       </View>
             </Animated.View>
           )}
-        </View>
+                    </View>
 
   {/* Top Rated Providers */}
   <View style={styles.featuredSection}>
     <Text style={styles.sectionTitle}>Top Rated Providers</Text>
     {isLoadingFeatured ? (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
-        {renderSkeletonCards(3, 'top-rated-skeleton')}
-      </ScrollView>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading top rated providers...</Text>
+                              </View>
     ) : topRatedServices.length === 0 ? (
       <View style={styles.emptyFeaturedContainer}>
         <Text style={styles.emptyFeaturedText}>No top rated providers available</Text>
-      </View>
+                            </View>
     ) : (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
         {topRatedServices.map((service) => renderProviderCard(service, 'top-rated'))}
       </ScrollView>
-    )}
-  </View>
+                        )}
+                      </View>
 
         {/* Featured Services */}
         <View style={styles.featuredSection}>
           <Text style={styles.sectionTitle}>Featured Providers</Text>
           {isLoadingFeatured ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
-              {renderSkeletonCards(3, 'featured-skeleton')}
-            </ScrollView>
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading featured services...</Text>
+                        </View>
           ) : featuredServices.length === 0 ? (
             <View style={styles.emptyFeaturedContainer}>
               <Text style={styles.emptyFeaturedText}>No featured services available</Text>
@@ -1269,19 +1221,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         onClose={() => setShowBookingModal(false)}
         onBooked={(bookingId) => {
           setShowBookingModal(false);
-          Alert.alert(
-            'Booking Confirmed',
-            `Your booking (ID: ${bookingId}) has been placed.`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  onNavigate?.('bookings');
-                },
-              },
-            ],
-            { cancelable: false }
-          );
+          Alert.alert('Booking Confirmed', `Your booking (ID: ${bookingId}) has been placed.`);
         }}
       />
     </SafeAreaView>
@@ -1291,7 +1231,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
   },
   scrollContent: {
     flexGrow: 1,
@@ -1303,63 +1243,51 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     padding: 20,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderRadius: 24,
+    borderWidth: 0,
     shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowRadius: 16,
+    elevation: 5,
   },
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   refreshButton: {
-    padding: 10,
-    borderRadius: 12,
+    padding: 8,
+    borderRadius: 20,
     backgroundColor: '#fdf2f8',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#fce7f3',
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   refreshButtonActive: {
     backgroundColor: '#ec4899',
     borderColor: '#ec4899',
-    shadowOpacity: 0.3,
   },
   refreshingIcon: {
     transform: [{ rotate: '180deg' }],
   },
   notificationButton: {
     position: 'relative',
-    padding: 10,
-    borderRadius: 12,
+    padding: 8,
+    borderRadius: 20,
     backgroundColor: '#fdf2f8',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#fce7f3',
-    shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: 0,
+    right: 0,
     backgroundColor: '#ef4444',
     borderRadius: 10,
     minWidth: 20,
@@ -1369,45 +1297,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     borderWidth: 2,
     borderColor: '#ffffff',
-    zIndex: 10,
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
   badgeText: {
     color: '#ffffff',
     fontSize: 10,
     fontWeight: 'bold',
-    lineHeight: 12,
+  },
+  badgeEmpty: {
+    backgroundColor: '#94a3b8',
   },
   greeting: {
     fontSize: 15,
     color: '#64748b',
     fontWeight: '600',
     letterSpacing: 0.3,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   userName: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0f172a',
     letterSpacing: -0.5,
   },
   
   subtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#64748b',
     fontWeight: '500',
-    marginTop: 4,
+    marginTop: 8,
     letterSpacing: 0.2,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 28,
-    gap: 10,
+    marginBottom: 30,
   },
   searchBar: {
     flex: 1,
@@ -1419,18 +1342,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderWidth: 2,
     borderColor: '#e2e8f0',
+    marginRight: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  searchBarFocused: {
-    borderColor: '#ec4899',
-    shadowColor: '#ec4899',
-    shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 4,
+    elevation: 3,
   },
   searchBarContainer: {
     flex: 1,
@@ -1440,9 +1357,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#0f172a',
-    marginLeft: 10,
-    fontWeight: '500',
-    paddingVertical: 0,
+    marginLeft: 8,
   },
   suggestionsContainer: {
     position: 'absolute',
@@ -1450,68 +1365,61 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    marginTop: 6,
-    maxHeight: 320,
+    borderRadius: 12,
+    marginTop: 4,
+    maxHeight: 300,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     zIndex: 1000,
-    overflow: 'hidden',
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
-    backgroundColor: '#ffffff',
   },
   suggestionContent: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 12,
   },
   suggestionText: {
     fontSize: 15,
     color: '#0f172a',
-    fontWeight: '600',
-    marginBottom: 3,
-    letterSpacing: 0.2,
+    fontWeight: '500',
+    marginBottom: 2,
   },
   suggestionType: {
     fontSize: 12,
     color: '#64748b',
-    fontWeight: '500',
   },
   searchButton: {
     backgroundColor: '#ec4899',
     borderRadius: 16,
     padding: 16,
-    minWidth: 56,
-    minHeight: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
     shadowColor: '#ec4899',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
   section: {
-    marginTop: 10,
-    marginBottom: 30,
+    marginTop: 8,
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '800',
     color: '#0f172a',
-    marginBottom: 8,
+    marginBottom: 16,
     marginRight: 12,
     flexShrink: 1,
+    letterSpacing: -0.5,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1537,15 +1445,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748b',
     marginTop: 4,
-  },
-  skeletonCard: {
-    backgroundColor: '#f1f5f9',
-    borderColor: '#e2e8f0',
-    overflow: 'hidden',
-  },
-  skeletonOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
   sectionActionText: {
     fontSize: 12,
@@ -1697,7 +1596,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   featuredSection: {
-    marginBottom: 30,
+    marginBottom: 32,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -1708,22 +1607,22 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   featuredScroll: {
-    marginTop: 16,
+    marginTop: 4,
   },
   featuredCard: {
-    width: 300,
+    width: 320,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderRadius: 24,
+    padding: 20,
+    marginRight: 20,
+    borderWidth: 0,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
     position: 'relative',
+    overflow: 'hidden',
   },
   featuredBadgeCard: {
     position: 'absolute',
@@ -1734,16 +1633,16 @@ const styles = StyleSheet.create({
   featuredBadgeContentCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderBottomLeftRadius: 16,
-    borderTopRightRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderBottomLeftRadius: 20,
+    borderTopRightRadius: 24,
+    shadowColor: '#f97316',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
     backgroundColor: '#f97316',
   },
   featuredBadgeTextCard: {
@@ -1752,136 +1651,186 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
-  featuredProviderInfo: {
+  featuredCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  featuredProviderIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  featuredProviderAvatarWrapper: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: '#fdf2f8',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+    position: 'relative',
   },
   featuredProviderAvatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
   },
-  featuredProviderDetails: {
+  featuredProviderIconFallback: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#fce7f3',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+    borderWidth: 3,
+    borderColor: '#ffffff',
+  },
+  featuredProviderInfo: {
     flex: 1,
+    paddingTop: 2,
   },
   featuredProviderName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '800',
     color: '#0f172a',
     marginBottom: 4,
+    letterSpacing: -0.3,
   },
   featuredProviderOwner: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  featuredProviderMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
   featuredProviderRating: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 4,
   },
   featuredRatingTextCard: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#f59e0b',
-    marginLeft: 4,
-    marginRight: 8,
+    marginLeft: 2,
   },
   featuredReviewsTextCard: {
-    fontSize: 12,
-    color: '#9ca3af',
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
   featuredProviderLocation: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    gap: 4,
   },
   featuredLocationTextCard: {
     fontSize: 12,
     color: '#64748b',
-    marginLeft: 4,
+    fontWeight: '500',
   },
   featuredAvailabilityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   featuredAvailabilityText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#10b981',
-    marginLeft: 4,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   featuredSubcategoriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-    marginTop: 4,
+    gap: 8,
+    marginBottom: 16,
   },
   featuredSubcategoryChip: {
-    backgroundColor: '#f1f5f9',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
   },
   featuredSubcategoryText: {
     fontSize: 11,
-    color: '#64748b',
-    fontWeight: '500',
+    color: '#475569',
+    fontWeight: '600',
   },
   featuredProviderBrandImages: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     backgroundColor: '#f8fafc',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
+    marginBottom: 16,
   },
   featuredBrandImageGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 8,
+    gap: 12,
   },
   featuredBrandImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
+    width: 72,
+    height: 72,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
+    borderWidth: 2.5,
+    borderColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   featuredBrandImage: {
     width: '100%',
     height: '100%',
   },
   featuredBrandImagePlaceholder: {
-    width: 70,
-    height: 70,
-    borderRadius: 14,
+    width: 72,
+    height: 72,
+    borderRadius: 16,
     backgroundColor: '#f1f5f9',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#e2e8f0',
   },
+  featuredCardFooter: {
+    alignItems: 'center',
+  },
   featuredAvailabilityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    gap: 8,
   },
   featuredAvailabilityBadgeAvailable: {
     backgroundColor: '#10b981',
@@ -1889,10 +1838,23 @@ const styles = StyleSheet.create({
   featuredAvailabilityBadgeBusy: {
     backgroundColor: '#f59e0b',
   },
+  availabilityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  availabilityDotActive: {
+    backgroundColor: '#ffffff',
+  },
+  availabilityDotInactive: {
+    backgroundColor: '#ffffff',
+    opacity: 0.8,
+  },
   featuredAvailabilityBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#ffffff',
+    letterSpacing: 0.3,
   },
   emptyFeaturedContainer: {
     alignItems: 'center',

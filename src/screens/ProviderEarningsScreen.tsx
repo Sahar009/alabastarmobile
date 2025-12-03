@@ -366,25 +366,44 @@ const ProviderEarningsScreen: React.FC<ProviderEarningsScreenProps> = ({ onNavig
   }, [bankAccount.bankName, banks, verifyAccount]);
 
   const handleWithdrawal = useCallback(async () => {
+    console.log('[ProviderEarningsScreen] 🚀 Starting withdrawal process...');
+    console.log('[ProviderEarningsScreen] Withdrawal amount:', withdrawalAmount);
+    console.log('[ProviderEarningsScreen] Bank account:', {
+      bankName: bankAccount.bankName,
+      accountNumber: bankAccount.accountNumber ? `${bankAccount.accountNumber.substring(0, 3)}***` : 'N/A',
+      accountName: bankAccount.accountName,
+    });
+
     if (!withdrawalAmount || parseFloat(withdrawalAmount) <= 0) {
+      console.warn('[ProviderEarningsScreen] ⚠️ Invalid amount:', withdrawalAmount);
       Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
 
     const availableBalance = getWalletBalance();
+    console.log('[ProviderEarningsScreen] Available balance:', availableBalance);
+    
     if (parseFloat(withdrawalAmount) > availableBalance) {
+      console.warn('[ProviderEarningsScreen] ⚠️ Insufficient balance:', {
+        requested: withdrawalAmount,
+        available: availableBalance,
+      });
       Alert.alert('Error', 'Insufficient balance');
       return;
     }
 
     if (!bankAccount.accountNumber || !bankAccount.bankName || !bankAccount.accountName) {
+      console.warn('[ProviderEarningsScreen] ⚠️ Missing bank details:', bankAccount);
       Alert.alert('Error', 'Please provide complete bank details');
       return;
     }
 
     try {
       setProcessingWithdrawal(true);
+      console.log('[ProviderEarningsScreen] 📡 Loading token...');
       await apiService.loadToken();
+      
+      console.log('[ProviderEarningsScreen] 📤 Sending withdrawal request...');
       const response = await apiService.requestWithdrawal({
         amount: parseFloat(withdrawalAmount),
         bankName: bankAccount.bankName,
@@ -392,7 +411,14 @@ const ProviderEarningsScreen: React.FC<ProviderEarningsScreenProps> = ({ onNavig
         accountName: bankAccount.accountName,
       });
 
+      console.log('[ProviderEarningsScreen] 📥 Withdrawal response received:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+      });
+
       if (response.success) {
+        console.log('[ProviderEarningsScreen] ✅ Withdrawal successful!');
         Alert.alert('Success', 'Withdrawal request submitted successfully!');
         setShowWithdrawalModal(false);
         setWithdrawalAmount('');
@@ -403,13 +429,21 @@ const ProviderEarningsScreen: React.FC<ProviderEarningsScreenProps> = ({ onNavig
         });
         setAccountVerified(false);
         setVerifiedAccountName('');
+        console.log('[ProviderEarningsScreen] 🔄 Refreshing earnings stats...');
         await fetchEarningsStats();
       } else {
+        console.error('[ProviderEarningsScreen] ❌ Withdrawal failed:', response.message);
         Alert.alert('Error', response.message || 'Failed to process withdrawal');
       }
     } catch (error: any) {
-      console.error('Error processing withdrawal:', error);
-      Alert.alert('Error', 'Error processing withdrawal');
+      console.error('[ProviderEarningsScreen] ❌ Error processing withdrawal:', error);
+      console.error('[ProviderEarningsScreen] ❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        response: error.response?.data,
+      });
+      Alert.alert('Error', error.message || 'Error processing withdrawal. Please try again.');
     } finally {
       setProcessingWithdrawal(false);
     }

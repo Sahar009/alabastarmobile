@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Icon background color (dark gray/black to match icon design and prevent white edges) -->
-    <color name="ic_launcher_background">#000000</color>
+    <!-- Primary brand color -->
+    <color name="primary">#ec4899</color>
+    
+    <!-- Background colors -->
+    <color name="background">#FFFFFF</color>
+    <color name="surface">#F8F9FA</color>
+    
+    <!-- Text colors -->
+    <color name="text_primary">#1F2937</color>
+    <color name="text_secondary">#6B7280</color>
+    
+    <!-- Status colors -->
+    <color name="error">#EF4444</color>
+    <color name="success">#10B981</color>
+    <color name="warning">#F59E0B</color>
 </resources>
-

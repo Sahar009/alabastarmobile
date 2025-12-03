@@ -79,7 +79,7 @@ const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
 
   const handleContactSupport = (method: 'email' | 'phone') => {
     if (method === 'email') {
-      Linking.openURL('mailto:support@alabastar.com?subject=Support Request').catch(
+      Linking.openURL('mailto:support@alabastar.ng?subject=Support Request').catch(
         (err) => console.error('Failed to open email:', err)
       );
     } else {
@@ -154,7 +154,7 @@ const HelpSupportScreen: React.FC<HelpSupportScreenProps> = ({
             </View>
             <View style={styles.contactInfo}>
               <Text style={styles.contactTitle}>Email Support</Text>
-              <Text style={styles.contactSubtitle}>support@alabastar.com</Text>
+              <Text style={styles.contactSubtitle}>support@alabastar.ng</Text>
             </View>
             <ChevronDown size={20} color="#94a3b8" style={{ transform: [{ rotate: '-90deg' }] }} />
           </TouchableOpacity>
@@ -412,6 +412,21 @@ const styles = StyleSheet.create({
 });
 
 export default HelpSupportScreen;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

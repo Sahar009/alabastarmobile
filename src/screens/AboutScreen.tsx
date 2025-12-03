@@ -104,23 +104,23 @@ const AboutScreen: React.FC<AboutScreenProps> = ({
           
           <TouchableOpacity
             style={styles.contactItem}
-            onPress={() => handleOpenLink('mailto:support@alabastar.com')}
+            onPress={() => handleOpenLink('mailto:support@alabastar.ng')}
           >
             <Mail size={20} color="#2563EB" />
             <View style={styles.contactContent}>
               <Text style={styles.contactLabel}>Email</Text>
-              <Text style={styles.contactValue}>support@alabastar.com</Text>
+              <Text style={styles.contactValue}>support@alabastar.ng</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.contactItem}
-            onPress={() => handleOpenLink('https://alabastar.com')}
+            onPress={() => handleOpenLink('https://alabastar.ng')}
           >
             <Globe size={20} color="#10b981" />
             <View style={styles.contactContent}>
               <Text style={styles.contactLabel}>Website</Text>
-              <Text style={styles.contactValue}>www.alabastar.com</Text>
+              <Text style={styles.contactValue}>www.alabastar.ng</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -286,6 +286,21 @@ const styles = StyleSheet.create({
 });
 
 export default AboutScreen;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

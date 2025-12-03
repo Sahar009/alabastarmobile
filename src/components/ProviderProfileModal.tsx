@@ -25,8 +25,9 @@ import {
   Building2,
 } from 'lucide-react-native';
 import type { Provider as ProviderType } from '../services/providerService';
+import { apiService } from '../services/api';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 interface ProviderProfileModalProps {
   provider: ProviderType | null;
@@ -63,6 +64,7 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
     if (isVisible && provider) {
       fetchProviderDetails();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible, provider]);
 
   const fetchProviderDetails = async () => {
@@ -89,18 +91,26 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
       // Limit to 8 images
       setPortfolioImages(images.slice(0, 8));
 
-      // Fetch real reviews from API - try provider profile endpoint first (includes reviews)
+      // Fetch real reviews from API
       try {
-        const API_BASE_URL = 'https://alabastar-backend.onrender.com/api';
+        // Use apiService.baseURL which already includes /api
+        const baseUrl = apiService.baseURL;
         
         // Try provider profile endpoint first (includes reviews)
-        const profileUrl = `${API_BASE_URL}/providers/profile/${provider.id}`;
+        const profileUrl = `${baseUrl}/providers/profile/${provider.id}`;
         console.log('[ProviderProfileModal] Fetching provider profile with reviews from:', profileUrl);
         
-        let apiReviews = [];
-        let reviewsData = null;
+        let apiReviews: any[] = [];
         
-        const profileResponse = await fetch(profileUrl);
+        const token = await apiService.loadToken();
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+        
+        const profileResponse = await fetch(profileUrl, { headers });
         
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
@@ -110,121 +120,90 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
             hasData: !!profileData.data,
             hasReviews: !!profileData.data?.reviews,
             reviewCount: profileData.data?.reviews?.length || 0,
-            fullDataStructure: Object.keys(profileData.data || {}),
           });
           
           if (profileData.success && profileData.data) {
-            // Check if reviews are directly in data or nested
             if (Array.isArray(profileData.data.reviews)) {
               apiReviews = profileData.data.reviews;
               console.log('[ProviderProfileModal] ✅ Got reviews from provider profile endpoint:', apiReviews.length);
-              console.log('[ProviderProfileModal] First review sample:', apiReviews[0] ? {
-                id: apiReviews[0].id,
-                rating: apiReviews[0].rating,
-                hasUser: !!apiReviews[0].User,
-                userFullName: apiReviews[0].User?.fullName,
-              } : 'No reviews');
-            } else {
-              console.warn('[ProviderProfileModal] ⚠️ Reviews not an array:', typeof profileData.data.reviews);
             }
           }
         } else {
-          const errorText = await profileResponse.text();
           console.warn('[ProviderProfileModal] ⚠️ Profile API request failed:', {
             status: profileResponse.status,
             statusText: profileResponse.statusText,
-            error: errorText.substring(0, 200),
           });
         }
         
         // Fallback to reviews endpoint if profile endpoint doesn't have reviews
         if (apiReviews.length === 0) {
-          const reviewsUrl = `${API_BASE_URL}/reviews/provider/${provider.id}`;
+          const reviewsUrl = `${baseUrl}/reviews/provider/${provider.id}`;
           console.log('[ProviderProfileModal] Falling back to reviews endpoint:', reviewsUrl);
           
-          const reviewsResponse = await fetch(reviewsUrl);
+          const reviewsResponse = await fetch(reviewsUrl, { headers });
           
           if (reviewsResponse.ok) {
-            reviewsData = await reviewsResponse.json();
-            
-            console.log('[ProviderProfileModal] Reviews API response:', {
-              success: reviewsData.success,
-              hasData: !!reviewsData.data,
-              reviewCount: reviewsData.data?.reviews?.length || 0,
-            });
+            const reviewsData = await reviewsResponse.json();
             
             if (reviewsData.success && reviewsData.data?.reviews && Array.isArray(reviewsData.data.reviews)) {
               apiReviews = reviewsData.data.reviews;
               console.log('[ProviderProfileModal] ✅ Got reviews from reviews endpoint');
             }
+          } else {
+            console.warn('[ProviderProfileModal] ⚠️ Reviews API request failed:', {
+              status: reviewsResponse.status,
+              statusText: reviewsResponse.statusText,
+            });
           }
         }
         
         if (apiReviews.length > 0) {
+          // Transform API reviews to component format
+          const transformedReviews: Review[] = apiReviews.map((review: any) => {
+            const reviewDate = review.createdAt 
+              ? new Date(review.createdAt)
+              : new Date();
             
-            // Transform API reviews to component format
-            const transformedReviews: Review[] = apiReviews.map((review: any) => {
-              // Format date
-              const reviewDate = review.createdAt 
-                ? new Date(review.createdAt)
-                : new Date();
-              
-              const now = new Date();
-              const diffInMs = now.getTime() - reviewDate.getTime();
-              const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-              const diffInWeeks = Math.floor(diffInDays / 7);
-              const diffInMonths = Math.floor(diffInDays / 30);
-              
-              let dateStr = '';
-              if (diffInDays === 0) {
-                dateStr = 'Today';
-              } else if (diffInDays === 1) {
-                dateStr = '1 day ago';
-              } else if (diffInDays < 7) {
-                dateStr = `${diffInDays} days ago`;
-              } else if (diffInWeeks === 1) {
-                dateStr = '1 week ago';
-              } else if (diffInWeeks < 4) {
-                dateStr = `${diffInWeeks} weeks ago`;
-              } else if (diffInMonths === 1) {
-                dateStr = '1 month ago';
-              } else if (diffInMonths < 12) {
-                dateStr = `${diffInMonths} months ago`;
-              } else {
-                dateStr = reviewDate.toLocaleDateString();
-              }
-              
-              return {
-                id: review.id || `review-${Math.random()}`,
-                userName: review.User?.fullName || review.user?.fullName || 'Anonymous',
-                userAvatar: review.User?.avatarUrl || review.user?.avatarUrl,
-                rating: review.rating || 0,
-                comment: review.comment || '',
-                date: dateStr,
-                service: review.booking?.serviceId || undefined,
-              };
-            });
+            const now = new Date();
+            const diffInMs = now.getTime() - reviewDate.getTime();
+            const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+            const diffInWeeks = Math.floor(diffInDays / 7);
+            const diffInMonths = Math.floor(diffInDays / 30);
             
-            console.log('[ProviderProfileModal] ✅ Using REAL reviews from API:', {
-              count: transformedReviews.length,
-              reviews: transformedReviews.map(r => ({
-                id: r.id,
-                userName: r.userName,
-                rating: r.rating,
-                date: r.date,
-              })),
-            });
+            let dateStr = '';
+            if (diffInDays === 0) {
+              dateStr = 'Today';
+            } else if (diffInDays === 1) {
+              dateStr = '1 day ago';
+            } else if (diffInDays < 7) {
+              dateStr = `${diffInDays} days ago`;
+            } else if (diffInWeeks === 1) {
+              dateStr = '1 week ago';
+            } else if (diffInWeeks < 4) {
+              dateStr = `${diffInWeeks} weeks ago`;
+            } else if (diffInMonths === 1) {
+              dateStr = '1 month ago';
+            } else if (diffInMonths < 12) {
+              dateStr = `${diffInMonths} months ago`;
+            } else {
+              dateStr = reviewDate.toLocaleDateString();
+            }
             
-            setReviews(transformedReviews);
-          } else {
-            console.warn('[ProviderProfileModal] ⚠️ No reviews in API response, showing empty state');
-            setReviews([]);
-          }
-        } else {
-          console.warn('[ProviderProfileModal] ⚠️ Reviews API request failed:', {
-            status: reviewsResponse.status,
-            statusText: reviewsResponse.statusText,
+            return {
+              id: review.id || `review-${Math.random()}`,
+              userName: review.User?.fullName || review.user?.fullName || 'Anonymous',
+              userAvatar: review.User?.avatarUrl || review.user?.avatarUrl,
+              rating: review.rating || 0,
+              comment: review.comment || '',
+              date: dateStr,
+              service: review.booking?.serviceId || undefined,
+            };
           });
+          
+          console.log('[ProviderProfileModal] ✅ Using REAL reviews from API:', transformedReviews.length);
+          setReviews(transformedReviews);
+        } else {
+          console.warn('[ProviderProfileModal] ⚠️ No reviews in API response');
           setReviews([]);
         }
       } catch (error) {
@@ -299,11 +278,11 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
               </View>
               <View style={styles.headerInfo}>
                 <Text style={styles.businessName}>{provider.businessName}</Text>
-                <Text style={styles.ownerName}>by {provider.user.fullName}</Text>
+                <Text style={styles.ownerName}>by {provider.user?.fullName || 'Provider'}</Text>
                 <View style={styles.ratingRow}>
                   <Star size={14} color="#fbbf24" fill="#fbbf24" />
                   <Text style={styles.ratingText}>
-                    {provider.ratingAverage.toFixed(1)} ({provider.ratingCount} reviews)
+                    {(provider.ratingAverage || 0).toFixed(1)} ({provider.ratingCount || 0} reviews)
                   </Text>
                 </View>
               </View>
@@ -361,19 +340,21 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
 
                     {/* Location & Availability */}
                     <View style={styles.section}>
-                      <View style={styles.infoRow}>
-                        <MapPin size={18} color="#64748b" />
-                        <Text style={styles.infoText}>
-                          {provider.locationCity}, {provider.locationState}
-                        </Text>
-                      </View>
+                      {(provider.locationCity || provider.locationState) && (
+                        <View style={styles.infoRow}>
+                          <MapPin size={18} color="#64748b" />
+                          <Text style={styles.infoText}>
+                            {[provider.locationCity, provider.locationState].filter(Boolean).join(', ')}
+                          </Text>
+                        </View>
+                      )}
                       {provider.isAvailable && (
                         <View style={styles.infoRow}>
                           <Clock size={18} color="#10b981" />
-                          <Text style={styles.infoText}>Available • {provider.estimatedArrival}</Text>
+                          <Text style={styles.infoText}>Available{provider.estimatedArrival ? ` • ${provider.estimatedArrival}` : ''}</Text>
                         </View>
                       )}
-                      {provider.yearsOfExperience > 0 && (
+                      {provider.yearsOfExperience && provider.yearsOfExperience > 0 && (
                         <View style={styles.infoRow}>
                           <Award size={18} color="#ec4899" />
                           <Text style={styles.infoText}>
@@ -388,10 +369,10 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
                       <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Services Offered</Text>
                         <View style={styles.subcategoriesContainer}>
-                          {provider.subcategories.map((subcategory, index) => (
+                          {provider.subcategories.map((subcategory: string, index: number) => (
                             <View key={index} style={styles.subcategoryChip}>
                               <Text style={styles.subcategoryText}>
-                                {subcategory.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                {subcategory.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                               </Text>
                             </View>
                           ))}
@@ -481,7 +462,9 @@ const ProviderProfileModal: React.FC<ProviderProfileModalProps> = ({
                               </View>
                             </View>
                           </View>
-                          <Text style={styles.reviewComment}>{review.comment}</Text>
+                          {review.comment && (
+                            <Text style={styles.reviewComment}>{review.comment}</Text>
+                          )}
                           {review.service && (
                             <Text style={styles.reviewService}>Service: {review.service}</Text>
                           )}

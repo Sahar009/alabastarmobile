@@ -12,8 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GoogleIcon } from '../components';
 import { Eye, EyeOff } from 'lucide-react-native';
+import { Image } from 'react-native';
 
 const { height } = Dimensions.get('window');
 
@@ -21,8 +21,8 @@ interface LoginScreenProps {
   onLogin: (email: string, password: string) => Promise<void>;
   onSignUp: () => void;
   onForgotPassword: () => void;
-  onGoogleSignIn: () => void;
-  onSwitchToProvider: () => void;
+  onBackToUserTypeSelection: () => void;
+  onGoogleSignIn?: () => Promise<void>;
   isGoogleLoading?: boolean;
 }
 
@@ -30,8 +30,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   onLogin, 
   onSignUp, 
   onForgotPassword,
+  onBackToUserTypeSelection,
   onGoogleSignIn,
-  onSwitchToProvider,
   isGoogleLoading = false,
 }) => {
   const [email, setEmail] = useState('');
@@ -85,15 +85,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         >
           {/* Header */}
           <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={onBackToUserTypeSelection}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
             <Text style={styles.title}>Welcome Back!</Text>
             <Text style={styles.subtitle}>
               Sign in to continue your journey with Alabastar
-            </Text>
-            <Text style={styles.providerPrompt}>
-              Are you a provider or want to be a provider?{' '}
-              <Text style={styles.providerLink} onPress={onSwitchToProvider}>
-                Click here
-              </Text>
             </Text>
           </View>
 
@@ -173,12 +174,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             <TouchableOpacity
               style={[styles.googleButton, isGoogleLoading && styles.googleButtonDisabled]}
               onPress={onGoogleSignIn}
+              disabled={isGoogleLoading || !onGoogleSignIn}
               activeOpacity={0.8}
-              disabled={isGoogleLoading}
             >
-              <GoogleIcon size={20} />
+              <Image
+                source={require('../../assets/google.png')}
+                style={styles.googleIcon}
+                resizeMode="contain"
+              />
               <Text style={styles.googleButtonText}>
-                {isGoogleLoading ? 'Connecting…' : 'Continue with Google'}
+                {isGoogleLoading ? 'Connecting...' : 'Continue with Google'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -249,6 +254,21 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     marginTop: 10,
   },
+  backButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 16,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -262,17 +282,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
     lineHeight: 20,
-  },
-  providerPrompt: {
-    marginTop: 12,
-    fontSize: 13,
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  providerLink: {
-    color: '#ec4899',
-    fontWeight: '600',
   },
   form: {
     marginBottom: 20,
@@ -389,6 +398,10 @@ const styles = StyleSheet.create({
   },
   googleButtonDisabled: {
     opacity: 0.6,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
   },
   googleButtonText: {
     fontSize: 16,

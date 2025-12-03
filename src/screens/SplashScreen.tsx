@@ -74,12 +74,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
-    marginBottom: 60,
+    marginBottom: 32,
     alignItems: 'center',
+    justifyContent: 'center',
+    width: '80%',
+    maxWidth: 300,
+    aspectRatio: 4096 / 1560, // Maintain logo aspect ratio
   },
   logo: {
-    width: 120,
-    height: 80,
+    width: '100%',
+    height: '100%',
+    maxWidth: 250,
+    maxHeight: 95,
   },
   loadingContainer: {
     marginTop: 20,

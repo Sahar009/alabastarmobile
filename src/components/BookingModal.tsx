@@ -213,13 +213,24 @@ const BookingModal: React.FC<BookingModalProps> = ({ visible, provider, onClose,
         notes: details.trim() || undefined,
       };
 
-      const response = await apiService.createBooking(payload);
+      // Use fetch directly since createBooking might not exist
+      const token = await apiService.loadToken();
+      const response = await fetch(`${apiService.baseURL}/bookings`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
 
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to create booking. Please try again.');
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to create booking. Please try again.');
       }
 
-      const bookingData = response.data;
+      const bookingData = data.data;
       const bookingId =
         bookingData?.id ||
         bookingData?.booking?.id ||
@@ -247,7 +258,7 @@ const BookingModal: React.FC<BookingModalProps> = ({ visible, provider, onClose,
       <View style={styles.overlay}>
         <SafeAreaView style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>Book {provider?.businessName || provider?.user.fullName || 'Provider'}</Text>
+            <Text style={styles.title}>Book {provider?.businessName || provider?.user?.fullName || 'Provider'}</Text>
             <TouchableOpacity onPress={onClose} style={styles.close}>
               <X size={20} color="#0f172a" />
             </TouchableOpacity>
@@ -421,5 +432,3 @@ const styles = StyleSheet.create({
 });
 
 export default BookingModal;
-
-

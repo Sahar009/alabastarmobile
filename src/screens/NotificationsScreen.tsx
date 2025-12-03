@@ -1,36 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   RefreshControl,
-  Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Bell,
-  Check,
-  CheckCheck,
-  Trash2,
-  Filter,
   X,
+  CheckCircle,
+  AlertCircle,
+  Info,
+  Calendar,
+  Clock,
 } from 'lucide-react-native';
-import { apiService } from '../services/api';
 
 interface Notification {
   id: string;
   title: string;
-  body: string;
+  message: string;
   type: string;
-  category: string;
-  priority: string;
-  isRead: boolean;
+  read: boolean;
   createdAt: string;
-  actionUrl?: string;
-  imageUrl?: string;
+  metadata?: any;
 }
 
 interface NotificationsScreenProps {
@@ -39,77 +35,30 @@ interface NotificationsScreenProps {
 }
 
 const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
-  userData,
+  userData: _userData,
   onNavigate,
 }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const skeletonPulse = useRef(new Animated.Value(0)).current;
-  
-  const skeletonOpacity = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 1],
-  });
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonPulse, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(skeletonPulse, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [skeletonPulse]);
 
   useEffect(() => {
     fetchNotifications();
-  }, [filter, categoryFilter, page]);
+  }, []);
 
   const fetchNotifications = async () => {
     try {
       setLoading(true);
+      // TODO: Implement API call to fetch notifications
+      // const response = await apiService.getNotifications();
+      // if (response.success) {
+      //   setNotifications(response.data || []);
+      // }
       
-      const params: any = {
-        page,
-        limit: 20,
-      };
-
-      if (filter !== 'all') {
-        params.isRead = filter === 'read';
-      }
-
-      if (categoryFilter !== 'all') {
-        params.category = categoryFilter;
-      }
-
-      const response = await apiService.getNotifications(params);
-
-      if (response.success) {
-        setNotifications(response.data || []);
-        setTotalPages(response.pagination?.totalPages || 1);
-      } else {
-        Alert.alert('Error', 'Failed to fetch notifications');
-      }
-    } catch (error: any) {
-      console.error('Fetch notifications error:', error);
-      Alert.alert('Error', error.message || 'Failed to fetch notifications');
+      // Mock data for now
+      setNotifications([]);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -121,288 +70,126 @@ const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
     fetchNotifications();
   };
 
-  const markAsRead = async (notificationId: string) => {
-    try {
-      const response = await apiService.markNotificationAsRead(notificationId);
-      
-      if (response.success) {
-        setNotifications(prev =>
-          prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n))
-        );
-      }
-    } catch (error: any) {
-      console.error('Mark as read error:', error);
-      Alert.alert('Error', 'Failed to mark as read');
-    }
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffMinutes < 1) return 'Just now';
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+    });
   };
 
-  const markAllAsRead = async () => {
-    try {
-      const response = await apiService.markAllNotificationsAsRead();
-      
-      if (response.success) {
-        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-        Alert.alert('Success', 'All notifications marked as read');
-      }
-    } catch (error: any) {
-      console.error('Mark all as read error:', error);
-      Alert.alert('Error', 'Failed to mark all as read');
-    }
-  };
-
-  const deleteNotification = (notificationId: string) => {
-    Alert.alert(
-      'Delete Notification',
-      'Are you sure you want to delete this notification?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await apiService.deleteNotification(notificationId);
-              
-              if (response.success) {
-                setNotifications(prev => prev.filter(n => n.id !== notificationId));
-              }
-            } catch (error: any) {
-              console.error('Delete notification error:', error);
-              Alert.alert('Error', 'Failed to delete notification');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleNotificationPress = (notification: Notification) => {
-    if (!notification.isRead) {
-      markAsRead(notification.id);
-    }
-    // Navigate based on actionUrl if needed
-    if (notification.actionUrl && onNavigate) {
-      // Handle navigation
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent':
-        return '#ef4444';
-      case 'high':
-        return '#f59e0b';
-      case 'normal':
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return <CheckCircle size={20} color="#10b981" />;
+      case 'error':
+      case 'warning':
+        return <AlertCircle size={20} color="#f59e0b" />;
+      case 'booking':
+        return <Calendar size={20} color="#2563eb" />;
       default:
-        return '#ec4899';
+        return <Info size={20} color="#64748b" />;
     }
   };
 
-  const renderSkeletonCard = () => (
-    <View style={styles.skeletonCard}>
-      <View style={styles.skeletonHeader}>
-        <Animated.View style={[styles.skeletonTitleLine, { opacity: skeletonOpacity }]} />
-        <View style={styles.skeletonActions}>
-          <Animated.View style={[styles.skeletonActionButton, { opacity: skeletonOpacity }]} />
-          <Animated.View style={[styles.skeletonActionButton, { opacity: skeletonOpacity }]} />
-        </View>
-      </View>
-      <Animated.View style={[styles.skeletonBodyLine, { opacity: skeletonOpacity }]} />
-      <Animated.View style={[styles.skeletonBodyLineShort, { opacity: skeletonOpacity }]} />
-      <View style={styles.skeletonFooter}>
-        <Animated.View style={[styles.skeletonCategoryBadge, { opacity: skeletonOpacity }]} />
-        <Animated.View style={[styles.skeletonTimeLine, { opacity: skeletonOpacity }]} />
-      </View>
-    </View>
-  );
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'success':
+        return '#10b981';
+      case 'error':
+      case 'warning':
+        return '#f59e0b';
+      case 'booking':
+        return '#2563eb';
+      default:
+        return '#64748b';
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.iconContainer}>
-              <Bell size={24} color="#ffffff" />
-            </View>
-            <View>
-              <Text style={styles.headerTitle}>Notifications</Text>
-              <Text style={styles.headerSubtitle}>Stay updated</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.markAllButton}
-            onPress={markAllAsRead}
-            activeOpacity={0.7}
-          >
-            <CheckCheck size={18} color="#ffffff" />
-            <Text style={styles.markAllText}>Mark All</Text>
-          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerSubtitle}>
+            {notifications.length} {notifications.length === 1 ? 'notification' : 'notifications'}
+          </Text>
         </View>
       </View>
 
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <View style={styles.filterRow}>
-          <Filter size={16} color="#64748b" />
-          <View style={styles.filterButtons}>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-              onPress={() => setFilter('all')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-                All
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'unread' && styles.filterButtonActive]}
-              onPress={() => setFilter('unread')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'unread' && styles.filterTextActive]}>
-                Unread
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'read' && styles.filterButtonActive]}
-              onPress={() => setFilter('read')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'read' && styles.filterTextActive]}>
-                Read
-              </Text>
-            </TouchableOpacity>
-          </View>
+      {loading && notifications.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ec4899" />
+          <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
-      </View>
-
-      {/* Notifications List */}
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#ec4899"
-          />
-        }
-      >
-        {loading && notifications.length === 0 ? (
-          <View style={styles.skeletonContainer}>
-            {Array.from({ length: 6 }).map((_, index) => (
-              <React.Fragment key={index}>{renderSkeletonCard()}</React.Fragment>
-            ))}
-          </View>
-        ) : notifications.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Bell size={64} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No notifications</Text>
-            <Text style={styles.emptySubtitle}>
-              {filter === 'unread'
-                ? 'You have no unread notifications'
-                : 'You have no notifications yet'}
-            </Text>
-          </View>
-        ) : (
-          notifications.map((notification) => (
+      ) : notifications.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Bell size={64} color="#cbd5e1" />
+          <Text style={styles.emptyTitle}>No notifications</Text>
+          <Text style={styles.emptyText}>
+            You're all caught up! We'll notify you when there's something new.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#ec4899"
+            />
+          }
+        >
+          {notifications.map((notification) => (
             <TouchableOpacity
               key={notification.id}
               style={[
                 styles.notificationCard,
-                !notification.isRead && styles.notificationCardUnread,
+                !notification.read && styles.notificationCardUnread,
               ]}
-              onPress={() => handleNotificationPress(notification)}
               activeOpacity={0.7}
             >
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: `${getNotificationColor(notification.type)}20` },
+                ]}
+              >
+                {getNotificationIcon(notification.type)}
+              </View>
               <View style={styles.notificationContent}>
-                <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationTitle} numberOfLines={2}>
-                    {notification.title}
-                  </Text>
-                  <View style={styles.notificationActions}>
-                    {!notification.isRead && (
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => markAsRead(notification.id)}
-                        activeOpacity={0.7}
-                      >
-                        <Check size={18} color="#ec4899" />
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => deleteNotification(notification.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Trash2 size={18} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <Text style={styles.notificationBody} numberOfLines={3}>
-                  {notification.body}
-                </Text>
-
+                <Text style={styles.notificationTitle}>{notification.title}</Text>
+                <Text style={styles.notificationMessage}>{notification.message}</Text>
                 <View style={styles.notificationFooter}>
-                  <View
-                    style={[
-                      styles.categoryBadge,
-                      { backgroundColor: `${getPriorityColor(notification.priority)}20` },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryText,
-                        { color: getPriorityColor(notification.priority) },
-                      ]}
-                    >
-                      {notification.category}
+                  <View style={styles.timeContainer}>
+                    <Clock size={12} color="#94a3b8" />
+                    <Text style={styles.timeText}>
+                      {formatDate(notification.createdAt)}
                     </Text>
                   </View>
-                  <Text style={styles.notificationTime}>
-                    {new Date(notification.createdAt).toLocaleString()}
-                  </Text>
+                  {!notification.read && (
+                    <View style={styles.unreadDot} />
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
-          ))
-        )}
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <View style={styles.pagination}>
-            <TouchableOpacity
-              style={[styles.paginationButton, page === 1 && styles.paginationButtonDisabled]}
-              onPress={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.paginationText, page === 1 && styles.paginationTextDisabled]}>
-                Previous
-              </Text>
-            </TouchableOpacity>
-
-            <Text style={styles.paginationInfo}>
-              Page {page} of {totalPages}
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.paginationButton, page === totalPages && styles.paginationButtonDisabled]}
-              onPress={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.paginationText, page === totalPages && styles.paginationTextDisabled]}>
-                Next
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -413,277 +200,131 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
-    backgroundColor: '#ec4899',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.5,
   },
   headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-  },
-  markAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  markAllText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  filtersContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  filterButtons: {
-    flexDirection: 'row',
-    flex: 1,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-  },
-  filterButtonActive: {
-    backgroundColor: '#ec4899',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
     color: '#64748b',
-  },
-  filterTextActive: {
-    color: '#ffffff',
+    fontWeight: '500',
   },
   scrollView: {
     flex: 1,
   },
-  skeletonContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  skeletonCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 12,
-  },
-  skeletonHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-    gap: 8,
-  },
-  skeletonTitleLine: {
-    flex: 1,
-    height: 18,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 9,
-  },
-  skeletonActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  skeletonActionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#e2e8f0',
-  },
-  skeletonBodyLine: {
-    height: 14,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 7,
-    marginBottom: 8,
-    width: '100%',
-  },
-  skeletonBodyLineShort: {
-    height: 14,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 7,
-    width: '75%',
-    marginBottom: 12,
-  },
-  skeletonFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  scrollContent: {
+    padding: 20,
     gap: 12,
-    marginTop: 8,
-  },
-  skeletonCategoryBadge: {
-    width: 80,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#e2e8f0',
-  },
-  skeletonTimeLine: {
-    width: 120,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#e2e8f0',
-  },
-  emptyContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginTop: 8,
-    textAlign: 'center',
   },
   notificationCard: {
+    flexDirection: 'row',
     backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginTop: 12,
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   notificationCardUnread: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#ec4899',
     backgroundColor: '#fdf2f8',
-    borderColor: '#ec4899',
-    borderWidth: 2,
-    shadowColor: '#ec4899',
-    shadowOpacity: 0.1,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   notificationContent: {
-    gap: 8,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
+    flex: 1,
   },
   notificationTitle: {
-    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#0f172a',
+    marginBottom: 4,
   },
-  notificationActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationBody: {
+  notificationMessage: {
     fontSize: 14,
     color: '#475569',
     lineHeight: 20,
+    marginBottom: 8,
   },
   notificationFooter: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
-  categoryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#94a3b8',
-  },
-  pagination: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
   },
-  paginationButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  timeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  paginationButtonDisabled: {
-    opacity: 0.5,
-  },
-  paginationText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#0f172a',
-  },
-  paginationTextDisabled: {
+  timeText: {
+    fontSize: 12,
     color: '#94a3b8',
   },
-  paginationInfo: {
-    fontSize: 14,
-    fontWeight: '500',
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ec4899',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
     color: '#64748b',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 24,
+    marginBottom: 8,
+    letterSpacing: -0.5,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
 
 export default NotificationsScreen;
-

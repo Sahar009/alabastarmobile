@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io, Socket } from 'socket.io-client';
 
-const API_BASE_URL = 'https://alabastar-backend.onrender.com/api';
-const SOCKET_URL = 'https://alabastar-backend.onrender.com';
+const API_BASE_URL = 'https://backend.alabastar.ng/api';
+const SOCKET_URL = 'https://backend.alabastar.ng';
 
 // Types
 export interface Conversation {

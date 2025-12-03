@@ -12,8 +12,11 @@ import {
 } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from './src/services/api';
+import pushNotificationService from './src/services/pushNotificationService';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import SplashScreen from './src/screens/SplashScreen';
 import OnboardingNavigator from './src/screens/OnboardingNavigator';
+import UserTypeSelectionScreen from './src/screens/UserTypeSelectionScreen';
 import AuthNavigator from './src/screens/AuthNavigator';
 import ProvidersScreen from './src/screens/ProvidersScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -35,6 +38,7 @@ import BottomNavigation from './src/components/BottomNavigation';
 
 type AppScreen =
   | 'onboarding'
+  | 'user-type-selection'
   | 'auth'
   | 'home'
   | 'location-selection'
@@ -54,27 +58,45 @@ type AppScreen =
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
-  const [userType, setUserType] = useState<'user' | 'provider'>('user');
+  const [userType, setUserType] = useState<'user' | 'provider' | null>(null);
   const [_isAuthenticated, _setIsAuthenticated] = useState(false);
   const [userData, setUserData] = useState<any>(null);
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('onboarding');
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [messageRecipientId, setMessageRecipientId] = useState<string | null>(null);
   const [messageBookingId, setMessageBookingId] = useState<string | null>(null);
-  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
+    // Add delay to ensure React Native native modules are fully initialized
     const initialize = async () => {
       try {
+        // Wait for native modules to be ready
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Initialize in parallel with error handling
         await Promise.all([
-          checkFirstLaunch(),
-          checkAuthState(),
-          loadSavedLocation(),
+          checkFirstLaunch().catch(err => {
+            console.error('Error checking first launch:', err);
+            setIsFirstLaunch(false);
+            setCurrentScreen('user-type-selection');
+          }),
+          checkAuthState().catch(err => {
+            console.error('Error checking auth state:', err);
+          }),
+          loadSavedLocation().catch(err => {
+            console.error('Error loading location:', err);
+            setSelectedLocation('Lagos');
+          }),
         ]);
-      } finally {
-        setTimeout(() => setShowSplash(false), 1200);
+      } catch (error) {
+        console.error('Initialization error:', error);
+        // Set safe defaults on error
+        setIsFirstLaunch(false);
+        setCurrentScreen('user-type-selection');
+        setSelectedLocation('Lagos');
       }
     };
 
@@ -108,7 +130,6 @@ function App() {
         
         // Check if user is a provider and route accordingly
         const isProvider = user?.role === 'provider';
-        setUserType(isProvider ? 'provider' : 'user');
         if (isProvider) {
           setActiveTab('bookings');
           setCurrentScreen('bookings');
@@ -118,7 +139,32 @@ function App() {
         }
         
         // Load token into apiService for future API calls
-        await apiService.loadToken();
+        try {
+          await apiService.loadToken();
+        } catch (error) {
+          console.error('Error loading token:', error);
+          // Continue even if token loading fails
+        }
+
+        // Initialize push notifications
+        try {
+          await pushNotificationService.initialize(token);
+        } catch (error) {
+          console.error('Error initializing push notifications:', error);
+          // Continue even if push notification initialization fails
+        }
+
+        // Check for pending notification navigation
+        try {
+          const pendingNotification = await AsyncStorage.getItem('pendingNotification');
+          if (pendingNotification) {
+            const notificationData = JSON.parse(pendingNotification);
+            handleNotificationNavigation(notificationData);
+            await AsyncStorage.removeItem('pendingNotification');
+          }
+        } catch (error) {
+          console.error('Error handling pending notification:', error);
+        }
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
@@ -134,32 +180,52 @@ function App() {
         await AsyncStorage.setItem('hasLaunched', 'true');
       } else {
         setIsFirstLaunch(false);
-        setCurrentScreen('auth');
+        setCurrentScreen('user-type-selection');
       }
     } catch (error) {
       console.error('Error checking first launch:', error);
       setIsFirstLaunch(false);
-      setCurrentScreen('auth');
+      setCurrentScreen('user-type-selection');
     }
   };
 
   const handleOnboardingComplete = () => {
     setIsFirstLaunch(false);
+    setCurrentScreen('user-type-selection');
+  };
+
+  const handleUserTypeSelected = (type: 'user' | 'provider') => {
+    setUserType(type);
     setCurrentScreen('auth');
   };
 
-  const handleAuthSuccess = (authUserData: any) => {
+  const handleAuthSuccess = async (authUserData: any) => {
     console.log('Authentication successful!', { userType, authUserData });
     // Extract user from response data (response.data.user)
     const user = authUserData?.user || authUserData;
     setUserData(user);
     _setIsAuthenticated(true);
     
-    // Check both userType and the actual role from userData
-    const resolvedIsProvider = userType === 'provider' || user?.role === 'provider';
-    setUserType(resolvedIsProvider ? 'provider' : 'user');
+    // Save user data to AsyncStorage for persistence
+    try {
+      await apiService.setUser(user);
+    } catch (error) {
+      console.error('Error saving user data:', error);
+    }
+
+    // Initialize push notifications with auth token
+    try {
+      const token = await AsyncStorage.getItem('token');
+      await pushNotificationService.initialize(token);
+    } catch (error) {
+      console.error('Error initializing push notifications:', error);
+      // Continue even if push notification initialization fails
+    }
     
-    if (resolvedIsProvider) {
+    // Check both userType and the actual role from userData
+    const isProvider = userType === 'provider' || user?.role === 'provider';
+    
+    if (isProvider) {
       // Providers go directly to bookings screen after sign in
       setActiveTab('bookings');
       setCurrentScreen('bookings');
@@ -170,23 +236,52 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleNotificationNavigation = (data: any) => {
+    try {
+      console.log('[App] Handling notification navigation:', data);
+      
+      // Handle different notification types
+      if (data.type === 'booking' || data.bookingId) {
+        // Navigate to bookings screen
+        setCurrentScreen('bookings');
+        setActiveTab('bookings');
+      } else if (data.type === 'message' || data.conversationId) {
+        // Navigate to messages screen
+        if (data.userId) {
+          setMessageRecipientId(data.userId);
+        }
+        setCurrentScreen('messages');
+        setActiveTab('messages');
+      } else if (data.actionUrl) {
+        // Handle deep links
+        // You can parse the URL and navigate accordingly
+        console.log('[App] Notification action URL:', data.actionUrl);
+      }
+    } catch (error) {
+      console.error('[App] Error handling notification navigation:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    // Unregister push notification token
+    try {
+      await pushNotificationService.unregisterToken();
+    } catch (error) {
+      console.error('Error unregistering push notification token:', error);
+    }
+
     _setIsAuthenticated(false);
     setUserData(null);
-    setUserType('user');
-    setCurrentScreen('auth');
+    setUserType(null);
+    setCurrentScreen('user-type-selection');
     setSelectedCategory('');
     setSelectedLocation('');
   };
 
-  const handleSwitchToAuth = (type: 'user' | 'provider') => {
-    setUserType(type);
-    setCurrentScreen('auth');
+  const handleBackToUserTypeSelection = () => {
+    setUserType(null);
+    setCurrentScreen('user-type-selection');
   };
-
-  const handleSwitchToCustomerAuth = () => handleSwitchToAuth('user');
-
-  const handleSwitchToProviderAuth = () => handleSwitchToAuth('provider');
 
   const handleBackToHome = () => {
     setCurrentScreen('home');
@@ -199,15 +294,18 @@ function App() {
     setSelectedLocation('');
   };
 
-  const handleSelectCategory = (category: string) => {
-    if (category === 'search') {
+  const handleSelectCategory = (category: string, search?: string) => {
+    if (category === 'search' && search) {
+      // If it's a search, go directly to providers with search query
+      setSearchQuery(search);
       setSelectedCategory('');
       setCurrentScreen('providers');
-      return;
+    } else {
+      // Normal category selection goes through location selection
+      setSelectedCategory(category);
+      setSearchQuery(''); // Clear search when selecting category
+      setCurrentScreen('location-selection');
     }
-
-    setSelectedCategory(category);
-    setCurrentScreen('location-selection');
   };
 
   const handleLocationSelected = async (location: string | any) => {
@@ -290,12 +388,15 @@ function App() {
     }
   };
 
-  if (showSplash || isFirstLaunch === null) {
+  if (isFirstLaunch === null) {
+    // Show loading screen or splash screen
     return (
-      <SafeAreaProvider>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <SplashScreen />
-      </SafeAreaProvider>
+      <ErrorBoundary>
+        <SafeAreaProvider>
+          <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+          <SplashScreen />
+        </SafeAreaProvider>
+      </ErrorBoundary>
     );
   }
 
@@ -304,13 +405,15 @@ function App() {
       case 'onboarding':
         return <OnboardingNavigator onComplete={handleOnboardingComplete} />;
       
+      case 'user-type-selection':
+        return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
+      
       case 'auth':
         return (
           <AuthNavigator 
             onAuthSuccess={handleAuthSuccess} 
-            onSwitchToCustomerAuth={handleSwitchToCustomerAuth}
-            onSwitchToProviderAuth={handleSwitchToProviderAuth}
-            userType={userType}
+            onBackToUserTypeSelection={handleBackToUserTypeSelection}
+            userType={userType!}
           />
         );
       
@@ -323,12 +426,6 @@ function App() {
             onNavigate={(screen: string) => {
               if (screen === 'notifications') {
                 setCurrentScreen('notifications');
-              } else if (screen === 'providers') {
-                setSelectedCategory('');
-                setCurrentScreen('providers');
-              } else if (screen === 'bookings') {
-                setActiveTab('bookings');
-                setCurrentScreen('bookings');
               }
             }}
           />
@@ -351,6 +448,7 @@ function App() {
             onBack={handleBackToLocationSelection}
             selectedCategory={selectedCategory}
             selectedLocation={selectedLocation}
+            searchQuery={searchQuery}
           />
         );
       
@@ -400,9 +498,6 @@ function App() {
                 default:
                   console.log('Navigate to:', screen);
               }
-            }}
-            onProfileUpdated={(updatedUser) => {
-              setUserData(updatedUser);
             }}
           />
         );
@@ -582,14 +677,7 @@ function App() {
         );
       
       default:
-        return (
-          <AuthNavigator 
-            onAuthSuccess={handleAuthSuccess} 
-            onSwitchToCustomerAuth={handleSwitchToCustomerAuth}
-            onSwitchToProviderAuth={handleSwitchToProviderAuth}
-            userType={userType}
-          />
-        );
+        return <OnboardingNavigator onComplete={handleOnboardingComplete} />;
     }
   };
 
@@ -615,19 +703,21 @@ function App() {
     );
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <View style={styles.container}>
-        {renderCurrentScreen()}
-        {shouldShowBottomNav && (
-          <BottomNavigation 
-            activeTab={activeTab} 
-            onTabChange={handleTabChange}
-            isProvider={userData?.role === 'provider'}
-          />
-        )}
-      </View>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={styles.container}>
+          {renderCurrentScreen()}
+          {shouldShowBottomNav && (
+            <BottomNavigation 
+              activeTab={activeTab} 
+              onTabChange={handleTabChange}
+              isProvider={userData?.role === 'provider'}
+            />
+          )}
+        </View>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 

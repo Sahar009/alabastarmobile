@@ -212,7 +212,7 @@ const ProviderReferralScreen: React.FC<ProviderReferralScreenProps> = ({ userDat
     }
 
     const shareText = `Join me on Alabastar! Use my referral code: ${referralCode} to get started as a service provider and earn great opportunities.`;
-    const shareUrl = `https://alabastar.com/signup?ref=${referralCode}`;
+    const shareUrl = `https://alabastar.ng/signup?ref=${referralCode}`;
 
     try {
       const result = await Share.share({

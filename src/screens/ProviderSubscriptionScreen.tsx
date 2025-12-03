@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -23,7 +22,7 @@ import {
   ShieldCheck,
   Wallet,
 } from 'lucide-react-native';
-import { apiService, API_BASE_URL } from '../services/api';
+import { apiService } from '../services/api';
 
 interface ProviderSubscriptionScreenProps {
   userData: any;
@@ -115,7 +114,7 @@ const FALLBACK_PLANS: SubscriptionPlan[] = [
 ];
 
 const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
-  userData: _userData,
+  userData,
   onBack,
   onNavigate,
 }) => {
@@ -137,7 +136,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
         currency,
         minimumFractionDigits: 0,
       }).format(amount);
-    } catch (_error) {
+    } catch (error) {
       return `${currency} ${amount.toFixed(0)}`;
     }
   }, []);
@@ -154,7 +153,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
         month: 'short',
         day: 'numeric',
       });
-    } catch (_error) {
+    } catch (error) {
       return '—';
     }
   }, []);
@@ -163,15 +162,15 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
     try {
       setLoading(true);
       const [subscriptionResponse, plansResponse, historyResponse] = await Promise.all([
-        apiService.getProviderSubscription().catch(() => ({ success: false, data: null })),
-        apiService.getSubscriptionPlans().catch(() => ({ success: false, data: null })),
-        apiService.getProviderSubscriptionHistory().catch(() => ({ success: false, data: [] })),
+        apiService.getProviderSubscription().catch(() => ({ success: false })),
+        apiService.getSubscriptionPlans().catch(() => ({ success: false })),
+        apiService.getProviderSubscriptionHistory().catch(() => ({ success: false })),
       ]);
 
       if (subscriptionResponse?.success) {
         const data = subscriptionResponse.data;
         if (data) {
-          const subscriptionData = {
+          setSubscription({
             id: data.id,
             planId: data.subscriptionPlanId || data.planId,
             planName: data.SubscriptionPlan?.name || data.planName || 'Subscription',
@@ -186,24 +185,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
                 : Number.parseFloat(data.amount || data.metadata?.payment_amount || '0') || 0,
             currency: data.currency || 'NGN',
             featureLimits: data.featureLimits || data.SubscriptionPlan?.featureLimits || null,
-          };
-          
-          setSubscription(subscriptionData);
-          
-          // Cache subscription data to AsyncStorage for other screens to use
-          try {
-            const cacheData = {
-              planName: subscriptionData.planName,
-              status: subscriptionData.status,
-              startDate: subscriptionData.startDate,
-              endDate: subscriptionData.endDate,
-              amount: subscriptionData.amount,
-              currency: subscriptionData.currency,
-            };
-            await AsyncStorage.setItem('providerSubscription', JSON.stringify(cacheData));
-          } catch (storageError) {
-            console.error('Error caching subscription:', storageError);
-          }
+          });
         } else {
           setSubscription(null);
         }
@@ -258,36 +240,6 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
     }
   }, []);
 
-  // Load cached subscription data on mount
-  useEffect(() => {
-    const loadCachedSubscription = async () => {
-      try {
-        const cachedSubscription = await AsyncStorage.getItem('providerSubscription');
-        if (cachedSubscription) {
-          const parsed = JSON.parse(cachedSubscription);
-          // Create a minimal subscription object from cache
-          setSubscription({
-            id: '',
-            planId: '',
-            planName: parsed.planName || 'Subscription',
-            status: parsed.status || 'inactive',
-            startDate: parsed.startDate || null,
-            endDate: parsed.endDate || null,
-            nextBillingDate: parsed.endDate || null,
-            autoRenew: false,
-            amount: parsed.amount || 0,
-            currency: parsed.currency || 'NGN',
-            featureLimits: null,
-          });
-        }
-      } catch (storageError) {
-        console.error('Error loading cached subscription:', storageError);
-      }
-    };
-    
-    loadCachedSubscription();
-  }, []);
-
   useEffect(() => {
     fetchSubscriptionData();
   }, [fetchSubscriptionData]);
@@ -321,9 +273,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
           onPress: async () => {
             try {
               setActionLoading(true);
-              const apiHost = API_BASE_URL.replace(/\/api\/?$/, '');
-              const callbackUrl = `${apiHost}/subscriptions/payment/callback?platform=mobile`;
-              const response = await apiService.initializeProviderSubscription(plan.id, { callbackUrl });
+              const response = await apiService.initializeProviderSubscription(plan.id);
               if (response.success && response.data) {
                 const paymentUrl =
                   response.data.authorizationUrl ||
@@ -626,7 +576,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
           )}
         </View>
 
-        <View style={styles.bottomSpacer} />
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       {loading && !refreshing ? (
@@ -957,9 +907,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
-  },
-  bottomSpacer: {
-    height: 80,
   },
 });
 

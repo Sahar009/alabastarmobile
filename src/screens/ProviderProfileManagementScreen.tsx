@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  AlertButton,
   Image,
   RefreshControl,
   ScrollView,
@@ -11,6 +10,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  FlatList,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,20 +27,15 @@ import {
   X,
   Image as ImageIcon,
   Trash2,
-  Play,
-  Video,
-  LogOut,
-  CreditCard,
 } from 'lucide-react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Modal } from 'react-native';
 import { apiService, API_BASE_URL } from '../services/api';
+import { providerOnboardingService } from '../services/providerOnboardingService';
 
 interface ProviderProfileManagementScreenProps {
   userData: any;
   onBack?: () => void;
   onNavigate?: (screen: string) => void;
-  onLogout?: () => void;
 }
 
 interface ProviderProfile {
@@ -56,19 +52,6 @@ interface ProviderProfile {
   portfolio: string[];
 }
 
-interface BrandImageDocument {
-  id: string;
-  url: string;
-  type: string;
-}
-
-interface VideoInfo {
-  videoUrl?: string;
-  videoThumbnail?: string;
-  videoDuration?: number;
-  videoUploadedAt?: string;
-}
-
 interface CategoryOption {
   value: string;
   label: string;
@@ -77,7 +60,127 @@ interface CategoryOption {
 
 const MAX_PORTFOLIO = 8;
 
-const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenProps> = ({ userData, onBack, onNavigate, onLogout }) => {
+// Skeleton Loader Component
+const ProfileSkeletonLoader: React.FC = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const opacity = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      {/* Business Information Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+          <Animated.View style={[styles.skeletonButtonSmall, { opacity }]} />
+        </View>
+
+        <View style={styles.skeletonInputGroup}>
+          <Animated.View style={[styles.skeletonLabel, { opacity }]} />
+          <Animated.View style={[styles.skeletonInput, { opacity }]} />
+        </View>
+
+        <View style={styles.inlineRow}>
+          <View style={[styles.skeletonInputGroup, styles.halfWidth]}>
+            <Animated.View style={[styles.skeletonLabel, { opacity }]} />
+            <Animated.View style={[styles.skeletonInput, { opacity }]} />
+          </View>
+          <View style={[styles.skeletonInputGroup, styles.halfWidth]}>
+            <Animated.View style={[styles.skeletonLabel, { opacity }]} />
+            <Animated.View style={[styles.skeletonInput, { opacity }]} />
+          </View>
+        </View>
+
+        <View style={styles.skeletonInputGroup}>
+          <Animated.View style={[styles.skeletonLabel, { opacity }]} />
+          <Animated.View style={[styles.skeletonInput, styles.skeletonTextArea, { opacity }]} />
+        </View>
+      </View>
+
+      {/* Services Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+        </View>
+
+        <Animated.View style={[styles.skeletonSelectInput, { opacity }]} />
+
+        <View style={styles.skeletonInputGroup}>
+          <Animated.View style={[styles.skeletonLabel, { opacity }]} />
+          <View style={styles.skeletonSubcategoryRow}>
+            <Animated.View style={[styles.skeletonInput, styles.skeletonSubcategoryInput, { opacity }]} />
+            <Animated.View style={[styles.skeletonButtonSmall, { opacity }]} />
+          </View>
+          <View style={styles.skeletonChipsContainer}>
+            <Animated.View style={[styles.skeletonChip, { opacity }]} />
+            <Animated.View style={[styles.skeletonChip, { opacity }]} />
+            <Animated.View style={[styles.skeletonChip, { opacity }]} />
+          </View>
+        </View>
+      </View>
+
+      {/* Portfolio Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+          <Animated.View style={[styles.skeletonBadge, { opacity }]} />
+        </View>
+
+        <View style={styles.portfolioGrid}>
+          {[1, 2, 3, 4].map((item) => (
+            <Animated.View key={item} style={[styles.skeletonPortfolioItem, { opacity }]} />
+          ))}
+        </View>
+      </View>
+
+      {/* Verification Skeleton */}
+      <View style={styles.sectionCard}>
+        <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, styles.skeletonLineWithMargin, { opacity }]} />
+        <View style={styles.statusRow}>
+          <Animated.View style={[styles.skeletonBadge, { opacity }]} />
+          <View style={styles.skeletonContentFlex}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineDetail1, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineDetail2, { opacity }]} />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+  );
+};
+
+const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenProps> = ({ userData, onBack, onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,7 +188,10 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
-  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [availableSubcategories, setAvailableSubcategories] = useState<string[]>([]);
+  const [loadingSubcategories, setLoadingSubcategories] = useState(false);
+  const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
+  const [_selectedCategoryForSubcat, setSelectedCategoryForSubcat] = useState<string>('');
 
   const [profile, setProfile] = useState<ProviderProfile>({
     businessName: '',
@@ -99,14 +205,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
   const [originalProfile, setOriginalProfile] = useState<ProviderProfile | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string>('pending');
   const [subcategoryInput, setSubcategoryInput] = useState('');
-  const [brandImageDocuments, setBrandImageDocuments] = useState<BrandImageDocument[]>([]);
-  const [videoInfo, setVideoInfo] = useState<VideoInfo>({});
-  const [showImageModal, setShowImageModal] = useState(false);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
-  const [videoLoading, setVideoLoading] = useState(false);
-  const [featureLimits, setFeatureLimits] = useState<any>(null);
-  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   const loadCategories = useCallback(async () => {
     try {
@@ -157,42 +255,37 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       if (response.success && response.data) {
         const provider = response.data;
         
-        // Extract brand images from ProviderDocuments where type is "brand_image"
-        let brandImages: string[] = [];
-        const documents: BrandImageDocument[] = [];
+        // Extract brand images from ProviderDocuments array
+        let brandImageUrls: string[] = [];
+        if (provider.ProviderDocuments && Array.isArray(provider.ProviderDocuments)) {
+          brandImageUrls = provider.ProviderDocuments
+            .filter((doc: any) => doc.type === 'brand_image' && doc.url)
+            .map((doc: any) => doc.url);
+        }
         
-        if (Array.isArray(provider.ProviderDocuments)) {
-          const brandImageDocs = provider.ProviderDocuments.filter(
-            (doc: any) => doc.type === 'brand_image' && doc.url
+        // Handle portfolio from different possible structures
+        let portfolioUrls: string[] = [];
+        
+        // Check direct portfolio array
+        if (Array.isArray(provider.portfolio)) {
+          portfolioUrls = provider.portfolio.map((img: any) => 
+            typeof img === 'string' ? img : (img.url || img)
           );
-          brandImages = brandImageDocs.map((doc: any) => doc.url);
-          documents.push(...brandImageDocs.map((doc: any) => ({
-            id: doc.id,
-            url: doc.url,
-            type: doc.type,
-          })));
+        }
+        // Check portfolio.images structure
+        else if (provider.portfolio?.images && Array.isArray(provider.portfolio.images)) {
+          portfolioUrls = provider.portfolio.images.map((img: any) => img.url || img);
+        }
+        // Check brandImages array
+        else if (Array.isArray(provider.brandImages)) {
+          portfolioUrls = provider.brandImages.map((img: any) => img.url || img);
         }
         
-        // Fallback to other sources if ProviderDocuments doesn't have brand images
-        if (brandImages.length === 0) {
-          if (Array.isArray(provider.portfolio)) {
-            brandImages = provider.portfolio;
-          } else if (Array.isArray(provider.portfolio?.images)) {
-            brandImages = provider.portfolio.images.map((img: any) => img.url || img);
-          } else if (Array.isArray(provider.brandImages)) {
-            brandImages = provider.brandImages.map((img: any) => img.url || img);
-          }
-        }
-        
-        // Set video info from provider data first
-        setVideoInfo({
-          videoUrl: provider.videoUrl || undefined,
-          videoThumbnail: provider.videoThumbnail || undefined,
-          videoDuration: provider.videoDuration || undefined,
-          videoUploadedAt: provider.videoUploadedAt || undefined,
-        });
-        
-        setBrandImageDocuments(documents);
+        // Combine brand images from ProviderDocuments with portfolio images
+        // Use brand images if available, otherwise fall back to portfolio
+        const allPortfolioImages = brandImageUrls.length > 0 
+          ? brandImageUrls 
+          : portfolioUrls;
         
         const normalized: ProviderProfile = {
           id: provider.id,
@@ -204,37 +297,18 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           locationState: provider.locationState || '',
           latitude: provider.latitude || '',
           longitude: provider.longitude || '',
-          portfolio: brandImages,
+          portfolio: allPortfolioImages,
         };
+        
+        console.log('[ProviderProfileManagementScreen] ✅ Loaded profile:', {
+          brandImagesFromDocs: brandImageUrls.length,
+          portfolioUrls: portfolioUrls.length,
+          finalPortfolio: allPortfolioImages.length,
+        });
+        
         setProfile(normalized);
         setOriginalProfile(normalized);
         setVerificationStatus(provider.verificationStatus || provider.status || 'pending');
-        
-        // Fetch feature limits if provider ID is available
-        if (provider.id) {
-          try {
-            const limitsResponse = await apiService.getProviderFeatureLimits(provider.id);
-            if (limitsResponse.success && limitsResponse.data) {
-              setFeatureLimits(limitsResponse.data);
-              console.log('Feature limits loaded:', limitsResponse.data);
-              
-              // Update video info from feature limits if available (like frontend)
-              if (limitsResponse.data.hasVideo && limitsResponse.data.videoDetails) {
-                const videoDetails = limitsResponse.data.videoDetails;
-                setVideoInfo({
-                  videoUrl: videoDetails.url || provider.videoUrl || undefined,
-                  videoThumbnail: videoDetails.thumbnail || provider.videoThumbnail || undefined,
-                  videoDuration: videoDetails.duration || provider.videoDuration || undefined,
-                  videoUploadedAt: provider.videoUploadedAt || undefined,
-                });
-                console.log('Video info updated from feature limits:', videoDetails);
-              }
-            }
-          } catch (error: any) {
-            console.error('Error fetching feature limits:', error);
-            // Don't show alert, just log the error
-          }
-        }
       } else {
         Alert.alert('Profile', response.message || 'Unable to load provider profile.');
       }
@@ -246,28 +320,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       setRefreshing(false);
     }
   }, []);
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonPulse, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(skeletonPulse, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [skeletonPulse]);
 
   useEffect(() => {
     loadCategories();
@@ -285,49 +337,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     if (!originalProfile) return false;
     return JSON.stringify(profile) !== JSON.stringify(originalProfile);
   }, [profile, originalProfile]);
-
-  const skeletonOpacity = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 1],
-  });
-
-  const renderSkeletonCard = (_: any, index: number) => (
-    <View key={index} style={styles.skeletonCard}>
-      <Animated.View style={[styles.skeletonLineWide, { opacity: skeletonOpacity }]} />
-      <Animated.View style={[styles.skeletonLineShort, { opacity: skeletonOpacity }]} />
-      <Animated.View style={[styles.skeletonSpacer, { opacity: skeletonOpacity }]} />
-      <View style={styles.skeletonRow}>
-        <Animated.View style={[styles.skeletonChip, { opacity: skeletonOpacity }]} />
-        <Animated.View style={[styles.skeletonChipHalf, { opacity: skeletonOpacity }]} />
-      </View>
-    </View>
-  );
-
-  const selectedCategoryLabel = useMemo(() => {
-    return categories.find((cat) => cat.value === profile.category)?.label || 'Select a category';
-  }, [categories, profile.category]);
-
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.headerBar}>
-          <Animated.View style={[styles.skeletonHeaderButton, { opacity: skeletonOpacity }]} />
-          <Animated.View style={[styles.skeletonHeaderTitle, { opacity: skeletonOpacity }]} />
-          <Animated.View style={[styles.skeletonHeaderButton, { opacity: skeletonOpacity }]} />
-        </View>
-
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {Array.from({ length: 4 }).map(renderSkeletonCard)}
-          <View style={styles.skeletonPortfolioWrapper}>
-            {Array.from({ length: 6 }).map((__, idx) => (
-              <Animated.View key={idx} style={[styles.skeletonPortfolioItem, { opacity: skeletonOpacity }]} />
-            ))}
-          </View>
-          <View style={styles.bottomSpacer} />
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
 
   const handleSave = async () => {
     if (!hasChanges) {
@@ -363,77 +372,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     }
   };
 
-
-  const handleDeleteBrandImage = async (documentId: string, imageUrl: string) => {
-    if (!profile.id) {
-      Alert.alert('Error', 'Provider ID not found');
-      return;
-    }
-
-    Alert.alert(
-      'Delete Image',
-      'Are you sure you want to delete this image?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingImageId(documentId);
-              const response = await apiService.deleteProviderDocument(profile.id!, documentId);
-              
-              if (response.success) {
-                // Remove from local state
-                const updatedDocuments = brandImageDocuments.filter(doc => doc.id !== documentId);
-                const updatedPortfolio = profile.portfolio.filter(url => url !== imageUrl);
-                
-                setBrandImageDocuments(updatedDocuments);
-                setProfile({ ...profile, portfolio: updatedPortfolio });
-                
-                // Reload profile to sync with backend
-                await loadProfile();
-                
-                // Refresh feature limits after deletion
-                if (profile.id) {
-                  try {
-                    const limitsResponse = await apiService.getProviderFeatureLimits(profile.id);
-                    if (limitsResponse.success && limitsResponse.data) {
-                      setFeatureLimits(limitsResponse.data);
-                    }
-                  } catch (error) {
-                    console.error('Error refreshing feature limits:', error);
-                  }
-                }
-                
-                Alert.alert('Success', 'Image deleted successfully');
-              } else {
-                Alert.alert('Error', response.message || 'Failed to delete image');
-              }
-            } catch (error: any) {
-              console.error('Delete image error', error);
-              Alert.alert('Error', error?.message || 'Failed to delete image');
-            } finally {
-              setDeletingImageId(null);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleAddBrandImage = async () => {
-    // Check feature limits for brand images
-    if (featureLimits) {
-      if (featureLimits.currentPhotoCount >= featureLimits.features.maxPhotos) {
-        Alert.alert(
-          'Photo Limit Reached',
-          `You have ${featureLimits.currentPhotoCount}/${featureLimits.features.maxPhotos} photos. Upgrade to Premium to add more!`
-        );
-        return;
-      }
-    }
-    
+  const handleAddPortfolioImage = async () => {
     if (profile.portfolio.length >= MAX_PORTFOLIO) {
       Alert.alert('Portfolio Limit', `You can only have up to ${MAX_PORTFOLIO} portfolio images.`);
       return;
@@ -455,66 +394,23 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           return;
         }
 
-        if (!profile.id) {
-          Alert.alert('Error', 'Provider profile not found');
-          return;
-        }
-
         try {
           setPortfolioLoading(true);
-          
-          // Ensure token is loaded
-          await apiService.loadToken();
-          
-          const formData = new FormData();
-          formData.append('documents', {
-            uri: asset.uri,
-            name: asset.fileName || `portfolio_${Date.now()}.jpg`,
-            type: asset.type || 'image/jpeg',
-          } as any);
-          formData.append('type', 'brand_image');
-
-          console.log('📤 Uploading brand image:', {
-            uri: asset.uri,
-            name: asset.fileName,
-            type: asset.type,
-            providerId: profile.id,
-          });
-
-          const uploadResponse = await apiService.uploadProviderDocument(profile.id, formData);
-          
-          console.log('📥 Brand image upload response:', uploadResponse);
-
-          if (uploadResponse.success && uploadResponse.data) {
-            const uploadedUrl = uploadResponse.data.url;
-            
-            // Update local state
-            const updatedPortfolio = [...profile.portfolio, uploadedUrl].slice(0, MAX_PORTFOLIO);
-            setProfile({ ...profile, portfolio: updatedPortfolio });
-            
-            // Reload profile to get the new document ID and sync with backend
-            await loadProfile();
-            
-            // Refresh feature limits after upload
-            if (profile.id) {
-              try {
-                const limitsResponse = await apiService.getProviderFeatureLimits(profile.id);
-                if (limitsResponse.success && limitsResponse.data) {
-                  setFeatureLimits(limitsResponse.data);
-                }
-              } catch (error) {
-                console.error('Error refreshing feature limits:', error);
-              }
+          const upload = await providerOnboardingService.uploadFile(asset.uri, asset.fileName || `portfolio_${Date.now()}.jpg`, asset.type || 'image/jpeg');
+          if (upload.success && upload.data?.url) {
+            const url = upload.data.url;
+            const updatedPortfolio = [...profile.portfolio, url].slice(0, MAX_PORTFOLIO);
+            const updated = { ...profile, portfolio: updatedPortfolio };
+            setProfile(updated);
+            if (!editing) {
+              setEditing(true);
             }
-            
-            Alert.alert('Success', 'Brand image uploaded successfully');
           } else {
-            console.error('Upload response missing data:', uploadResponse);
-            Alert.alert('Upload Failed', uploadResponse.message || 'Unable to upload portfolio image. Please try again.');
+            Alert.alert('Upload Failed', upload.message || 'Unable to upload portfolio image.');
           }
         } catch (error: any) {
-          console.error('Portfolio upload error:', error);
-          Alert.alert('Upload Error', error?.message || 'Unable to upload image. Please check your connection and try again.');
+          console.error('Portfolio upload error', error);
+          Alert.alert('Upload Error', error?.message || 'Unable to upload image.');
         } finally {
           setPortfolioLoading(false);
         }
@@ -522,210 +418,11 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     );
   };
 
-  const handleUploadVideo = async () => {
-    if (!profile.id) {
-      Alert.alert('Error', 'Provider profile not found');
-      return;
-    }
-
-    // Check if Premium plan (like frontend)
-    if (!featureLimits || featureLimits.features.maxVideos === 0) {
-      Alert.alert(
-        'Premium Feature',
-        'Video upload is a Premium feature! Upgrade to Premium to upload videos.'
-      );
-      return;
-    }
-
-    // Check if already has video
-    if (featureLimits.hasVideo) {
-      Alert.alert('Video Exists', 'You already have a video. Delete the existing one first.');
-      return;
-    }
-
-    launchImageLibrary(
-      {
-        mediaType: 'video',
-        quality: 0.8,
-        videoQuality: 'high',
-        includeBase64: false,
-      },
-      async (response) => {
-        if (response.didCancel) {
-          return;
-        } else if (response.errorMessage) {
-          Alert.alert('Error', response.errorMessage);
-          return;
-        }
-
-        const asset = response.assets?.[0];
-        if (!asset?.uri) {
-          Alert.alert('Upload Failed', 'Unable to read selected video.');
-          return;
-        }
-
-        // Check video size (max 50MB)
-        if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
-          Alert.alert('Error', 'Video file size must be less than 50MB');
-          return;
-        }
-
-        try {
-          setVideoLoading(true);
-          
-          // Note: Video upload requires the video to be hosted externally first (e.g., Cloudinary)
-          // The backend endpoint expects videoUrl, videoThumbnail, and videoDuration in JSON format
-          // This is not a direct file upload endpoint
-          
-          Alert.alert(
-            'Video Upload',
-            'Video upload requires external hosting. The backend endpoint expects a video URL, not a file upload. Please use the web interface or contact support for video upload assistance.',
-            [{ text: 'OK' }]
-          );
-          
-          // TODO: Implement Cloudinary video upload
-          // Steps needed:
-          // 1. Upload video file to Cloudinary and get videoUrl
-          // 2. Generate or upload video thumbnail and get videoThumbnail
-          // 3. Get video duration from asset.duration
-          // 4. Call apiService.uploadProviderVideo(profile.id, { videoUrl, videoThumbnail, videoDuration })
-          // 5. Reload profile
-          
-        } catch (error: any) {
-          console.error('Video upload error', error);
-          Alert.alert('Upload Error', error?.message || 'Unable to upload video.');
-        } finally {
-          setVideoLoading(false);
-        }
-      },
-    );
-  };
-
-  const handleDeleteVideo = async () => {
-    if (!profile.id) {
-      return;
-    }
-    
-    // Check if video exists
-    const hasVideo = (featureLimits?.hasVideo && featureLimits?.videoDetails) || videoInfo.videoUrl;
-    if (!hasVideo) {
-      Alert.alert('No Video', 'No video to delete');
-      return;
-    }
-
-    Alert.alert(
-      'Delete Video',
-      'Are you sure you want to delete this video?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setVideoLoading(true);
-              const response = await apiService.deleteProviderVideo(profile.id!);
-              
-              if (response.success) {
-                // Clear video info immediately
-                setVideoInfo({});
-                
-                // Refresh feature limits first to update hasVideo flag
-                if (profile.id) {
-                  try {
-                    const limitsResponse = await apiService.getProviderFeatureLimits(profile.id);
-                    if (limitsResponse.success && limitsResponse.data) {
-                      setFeatureLimits(limitsResponse.data);
-                    }
-                  } catch (error) {
-                    console.error('Error refreshing feature limits:', error);
-                  }
-                }
-                
-                // Then reload profile to sync everything
-                await loadProfile();
-                
-                Alert.alert('Success', 'Video deleted successfully');
-              } else {
-                Alert.alert('Error', response.message || 'Failed to delete video');
-              }
-            } catch (error: any) {
-              console.error('Delete video error', error);
-              Alert.alert('Error', error?.message || 'Failed to delete video');
-            } finally {
-              setVideoLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const formatVideoDuration = (seconds?: number) => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you sure you want to delete your account? This action cannot be undone. All your data will be permanently deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            // Show confirmation alert
-            Alert.alert(
-              'Final Confirmation',
-              'This is your last chance to cancel. Your account and all associated data will be permanently deleted.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete My Account',
-                  style: 'destructive',
-                  onPress: deleteAccount,
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
-  };
-
-  const deleteAccount = async () => {
-    try {
-      setDeletingAccount(true);
-      const response = await apiService.deleteAccount();
-
-      if (response.success) {
-        Alert.alert(
-          'Account Deleted',
-          'Your account has been successfully deleted. You will be logged out.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Logout user after account deletion
-                if (onLogout) {
-                  onLogout();
-                }
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Error', response.message || 'Failed to delete account');
-        setDeletingAccount(false);
-      }
-    } catch (error: any) {
-      console.error('Delete account error:', error);
-      Alert.alert('Error', error.message || 'Failed to delete account');
-      setDeletingAccount(false);
+  const handleRemovePortfolioImage = (index: number) => {
+    const updated = profile.portfolio.filter((_, idx) => idx !== index);
+    setProfile({ ...profile, portfolio: updated });
+    if (!editing) {
+      setEditing(true);
     }
   };
 
@@ -749,6 +446,64 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       setEditing(true);
     }
   };
+
+  const loadSubcategories = useCallback(async (category: string) => {
+    if (!category) return;
+    
+    try {
+      setLoadingSubcategories(true);
+      console.log('[ProviderProfileManagementScreen] 🚀 Loading subcategories for category:', category);
+      
+      const response = await apiService.getPopularSubcategories(category, 30);
+      
+      if (response.success && response.data?.subcategories) {
+        console.log('[ProviderProfileManagementScreen] ✅ Loaded subcategories:', response.data.subcategories.length);
+        setAvailableSubcategories(response.data.subcategories);
+      } else {
+        console.warn('[ProviderProfileManagementScreen] ⚠️ No subcategories found');
+        setAvailableSubcategories([]);
+      }
+    } catch (error: any) {
+      console.error('[ProviderProfileManagementScreen] ❌ Error loading subcategories:', error);
+      setAvailableSubcategories([]);
+    } finally {
+      setLoadingSubcategories(false);
+    }
+  }, []);
+
+  const handleCategorySelect = useCallback(async (categoryValue: string) => {
+    // Update category
+    setProfile(prev => ({ ...prev, category: categoryValue }));
+    
+    // Load and show subcategories
+    setSelectedCategoryForSubcat(categoryValue);
+    await loadSubcategories(categoryValue);
+    setShowSubcategoryModal(true);
+  }, [loadSubcategories]);
+
+  const handleSubcategoryToggle = (subcategory: string) => {
+    const normalized = subcategory.toLowerCase().trim();
+    if (profile.subcategories.includes(normalized)) {
+      // Remove if already selected
+      setProfile({ ...profile, subcategories: profile.subcategories.filter((item) => item !== normalized) });
+    } else {
+      // Add if not selected
+      setProfile({ ...profile, subcategories: [...profile.subcategories, normalized] });
+    }
+    if (!editing) {
+      setEditing(true);
+    }
+  };
+
+  const handleCloseSubcategoryModal = () => {
+    setShowSubcategoryModal(false);
+    setAvailableSubcategories([]);
+    setSelectedCategoryForSubcat('');
+  };
+
+  const selectedCategoryLabel = useMemo(() => {
+    return categories.find((cat) => cat.value === profile.category)?.label || 'Select a category';
+  }, [categories, profile.category]);
 
   const renderVerificationBadge = () => {
     const status = (verificationStatus || '').toLowerCase();
@@ -792,12 +547,15 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} />}
-      >
-        <View style={styles.sectionCard}>
+      {loading && !refreshing ? (
+        <ProfileSkeletonLoader />
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} />}
+        >
+          <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View>
               <Text style={styles.sectionHeading}>Business Information</Text>
@@ -896,15 +654,16 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
             disabled={!editing}
             onPress={() => {
               if (!editing) return;
-              const buttons: AlertButton[] = categories.map((category) => ({
-                text: category.label,
-                onPress: () => setProfile({ ...profile, category: category.value }),
-              }));
-              buttons.push({ text: 'Cancel', style: 'cancel' });
               Alert.alert(
                 'Select Category',
                 'Choose the primary category that best describes your business.',
-                buttons,
+                [
+                  ...categories.map((category) => ({
+                    text: category.label,
+                    onPress: () => handleCategorySelect(category.value),
+                  })),
+                  { text: 'Cancel', style: 'cancel' as const },
+                ],
               );
             }}
           >
@@ -957,35 +716,27 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               <Text style={styles.sectionHeading}>Portfolio</Text>
               <Text style={styles.sectionSubtitle}>Showcase your recent work</Text>
             </View>
-            <View style={styles.headerRight}>
-              <Text style={styles.sectionHint}>{profile.portfolio.length}/{MAX_PORTFOLIO}</Text>
-              <TouchableOpacity
-                style={styles.editImageButton}
-                onPress={() => setShowImageModal(true)}
-              >
-                <Edit3 size={14} color="#ec4899" />
-                <Text style={styles.editImageButtonText}>Edit</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.sectionHint}>{profile.portfolio.length}/{MAX_PORTFOLIO}</Text>
           </View>
 
           <View style={styles.portfolioGrid}>
             {profile.portfolio.map((url, index) => (
-              <TouchableOpacity
-                key={`${url}-${index}`}
-                style={styles.portfolioItem}
-                onPress={() => {
-                  setSelectedImageIndex(index);
-                  setShowImageModal(true);
-                }}
-              >
+              <View key={`${url}-${index}`} style={styles.portfolioItem}>
                 <Image source={{ uri: url }} style={styles.portfolioImage} />
-              </TouchableOpacity>
+                {editing && (
+                  <TouchableOpacity
+                    style={styles.portfolioRemove}
+                    onPress={() => handleRemovePortfolioImage(index)}
+                  >
+                    <Trash2 size={16} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </View>
             ))}
-            {profile.portfolio.length < MAX_PORTFOLIO && (
+            {editing && profile.portfolio.length < MAX_PORTFOLIO && (
               <TouchableOpacity
                 style={styles.portfolioAdd}
-                onPress={handleAddBrandImage}
+                onPress={handleAddPortfolioImage}
                 disabled={portfolioLoading}
               >
                 {portfolioLoading ? (
@@ -1001,124 +752,6 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           </View>
         </View>
 
-        {/* Video Section */}
-        {featureLimits && featureLimits.features.maxVideos > 0 ? (
-          <>
-            {(featureLimits.hasVideo && featureLimits.videoDetails) || videoInfo.videoUrl ? (
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionHeading}>Promotional Video</Text>
-                    <Text style={styles.sectionSubtitle}>Showcase your business</Text>
-                  </View>
-                  {editing && (
-                    <TouchableOpacity
-                      style={styles.deleteVideoButton}
-                      onPress={handleDeleteVideo}
-                      disabled={videoLoading}
-                    >
-                      {videoLoading ? (
-                        <ActivityIndicator size="small" color="#ef4444" />
-                      ) : (
-                        <Trash2 size={16} color="#ef4444" />
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </View>
-                
-                <TouchableOpacity
-                  style={styles.videoContainer}
-                  onPress={() => {
-                    const videoUrl = featureLimits.videoDetails?.url || videoInfo.videoUrl;
-                    if (videoUrl) {
-                      // Open video in browser or native video player
-                      Alert.alert('Video', 'Would you like to view the video?', [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'View', onPress: () => {
-                          // You can implement Linking.openURL(videoUrl) here
-                          console.log('Open video:', videoUrl);
-                        }},
-                      ]);
-                    }
-                  }}
-                >
-                  {(featureLimits.videoDetails?.thumbnail || videoInfo.videoThumbnail) ? (
-                    <Image
-                      source={{ uri: featureLimits.videoDetails?.thumbnail || videoInfo.videoThumbnail }}
-                      style={styles.videoThumbnail}
-                    />
-                  ) : (
-                    <View style={styles.videoThumbnailPlaceholder}>
-                      <Video size={40} color="#ec4899" />
-                    </View>
-                  )}
-                  <View style={styles.videoOverlay}>
-                    <View style={styles.videoPlayButton}>
-                      <Play size={24} color="#fff" fill="#fff" />
-                    </View>
-                    {(featureLimits.videoDetails?.duration || videoInfo.videoDuration) && (
-                      <Text style={styles.videoDuration}>
-                        {formatVideoDuration(featureLimits.videoDetails?.duration || videoInfo.videoDuration)}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-                {(featureLimits.videoDetails?.duration || videoInfo.videoDuration) && (
-                  <View style={styles.videoInfoRow}>
-                    <Text style={styles.videoInfoText}>
-                      Duration: {featureLimits.videoDetails?.duration || videoInfo.videoDuration}s
-                    </Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <View>
-                    <Text style={styles.sectionHeading}>Promotional Video</Text>
-                    <Text style={styles.sectionSubtitle}>Add a video to showcase your business</Text>
-                  </View>
-                </View>
-                <TouchableOpacity
-                  style={styles.addVideoButton}
-                  onPress={handleUploadVideo}
-                  disabled={videoLoading}
-                >
-                  {videoLoading ? (
-                    <ActivityIndicator color="#ec4899" />
-                  ) : (
-                    <>
-                      <Video size={20} color="#ec4899" />
-                      <Text style={styles.addVideoButtonText}>Upload Video</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                {featureLimits.features.videoMaxDuration && (
-                  <Text style={styles.videoHintText}>
-                    Max {featureLimits.features.videoMaxDuration} seconds • MP4, MOV, AVI • Max 50MB
-                  </Text>
-                )}
-              </View>
-            )}
-          </>
-        ) : (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionHeading}>Promotional Video</Text>
-                <Text style={styles.sectionSubtitle}>Premium Feature</Text>
-              </View>
-            </View>
-            <View style={styles.premiumFeatureBox}>
-              <Video size={48} color="#ec4899" />
-              <Text style={styles.premiumFeatureTitle}>Video Upload is a Premium Feature</Text>
-              <Text style={styles.premiumFeatureText}>
-                Upgrade to Premium to showcase your business with a promotional video
-              </Text>
-            </View>
-          </View>
-        )}
-
         <View style={styles.sectionCard}>
           <Text style={styles.sectionHeading}>Verification & Status</Text>
           <View style={styles.statusRow}>
@@ -1130,152 +763,81 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           </View>
         </View>
 
-        {/* Subscription Button */}
-        {onNavigate && (
-          <View style={styles.sectionCard}>
-            <TouchableOpacity
-              style={styles.subscriptionButton}
-              onPress={() => onNavigate('provider-subscription')}
-              activeOpacity={0.7}
-            >
-              <CreditCard size={20} color="#ec4899" />
-              <Text style={styles.subscriptionButtonText}>Manage Subscription</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Account Actions */}
-        {onLogout && (
-          <View style={styles.logoutSection}>
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={() => {
-                Alert.alert(
-                  'Sign Out',
-                  'Are you sure you want to sign out?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Sign Out', style: 'destructive', onPress: onLogout },
-                  ]
-                );
-              }}
-              activeOpacity={0.7}
-            >
-              <LogOut size={20} color="#ef4444" />
-              <Text style={styles.logoutText}>Sign Out</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.logoutButton, styles.deleteAccountButton]}
-              onPress={handleDeleteAccount}
-              disabled={deletingAccount}
-              activeOpacity={0.7}
-            >
-              {deletingAccount ? (
-                <ActivityIndicator size="small" color="#ef4444" />
-              ) : (
-                <Trash2 size={20} color="#ef4444" />
-              )}
-              <Text style={styles.logoutText}>Delete Account</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         <View style={styles.bottomSpacer} />
-      </ScrollView>
+        </ScrollView>
+      )}
 
-      {/* Image Editing Modal */}
+      {/* Subcategory Selection Modal */}
       <Modal
-        visible={showImageModal}
+        visible={showSubcategoryModal}
+        transparent
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowImageModal(false)}
+        onRequestClose={handleCloseSubcategoryModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Portfolio Images</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowImageModal(false);
-                  setSelectedImageIndex(null);
-                }}
-              >
-                <X size={24} color="#0f172a" />
+              <Text style={styles.modalTitle}>Select Subcategories</Text>
+              <TouchableOpacity onPress={handleCloseSubcategoryModal} style={styles.modalCloseButton}>
+                <X size={24} color="#64748b" />
               </TouchableOpacity>
             </View>
+            
+            <Text style={styles.modalSubtitle}>
+              Choose the services you offer. You can add custom ones later.
+            </Text>
 
-            <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
-              {profile.portfolio.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <ImageIcon size={48} color="#cbd5e1" />
-                  <Text style={styles.emptyStateText}>No images added yet</Text>
-                  <Text style={styles.emptyStateSubtext}>Add images to showcase your work</Text>
-                </View>
-              ) : (
-                <View style={styles.modalImageGrid}>
-                  {profile.portfolio.map((url, index) => {
-                    const document = brandImageDocuments.find(doc => doc.url === url);
-                    const isDeleting = deletingImageId === document?.id;
-                    
-                    return (
-                      <View key={`${url}-${index}`} style={styles.modalImageItem}>
-                        <Image source={{ uri: url }} style={styles.modalImage} />
-                        {document && (
-                          <TouchableOpacity
-                            style={[styles.modalDeleteButton, isDeleting && styles.modalDeleteButtonDisabled]}
-                            onPress={() => handleDeleteBrandImage(document.id, url)}
-                            disabled={isDeleting}
-                          >
-                            {isDeleting ? (
-                              <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                              <Trash2 size={16} color="#fff" />
-                            )}
-                          </TouchableOpacity>
-                        )}
-                        {selectedImageIndex === index && (
-                          <View style={styles.selectedIndicator}>
-                            <CheckCircle size={20} color="#22c55e" fill="#22c55e" />
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              {profile.portfolio.length < MAX_PORTFOLIO && (
-                <TouchableOpacity
-                  style={styles.modalAddButton}
-                  onPress={async () => {
-                    setShowImageModal(false);
-                    await handleAddBrandImage();
-                  }}
-                  disabled={portfolioLoading}
-                >
-                  {portfolioLoading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <>
-                      <Upload size={18} color="#fff" />
-                      <Text style={styles.modalAddButtonText}>Add New Image</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => {
-                  setShowImageModal(false);
-                  setSelectedImageIndex(null);
+            {loadingSubcategories ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#ec4899" />
+                <Text style={styles.modalLoadingText}>Loading subcategories...</Text>
+              </View>
+            ) : availableSubcategories.length > 0 ? (
+              <FlatList
+                data={availableSubcategories}
+                keyExtractor={(item, index) => `${item}-${index}`}
+                renderItem={({ item }) => {
+                  const isSelected = profile.subcategories.includes(item.toLowerCase().trim());
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.subcategoryItem,
+                        isSelected && styles.subcategoryItemSelected,
+                      ]}
+                      onPress={() => handleSubcategoryToggle(item)}
+                    >
+                      <Text
+                        style={[
+                          styles.subcategoryItemText,
+                          isSelected && styles.subcategoryItemTextSelected,
+                        ]}
+                      >
+                        {item.replace(/_/g, ' ')}
+                      </Text>
+                      {isSelected && <CheckCircle size={20} color="#ec4899" />}
+                    </TouchableOpacity>
+                  );
                 }}
-              >
-                <Text style={styles.modalCloseButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
+                contentContainerStyle={styles.modalListContent}
+                showsVerticalScrollIndicator={true}
+              />
+            ) : (
+              <View style={styles.modalEmptyContainer}>
+                <Text style={styles.modalEmptyText}>
+                  No popular subcategories found for this category.
+                </Text>
+                <Text style={styles.modalEmptySubtext}>
+                  You can add custom subcategories using the input field below.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.modalDoneButton}
+              onPress={handleCloseSubcategoryModal}
+            >
+              <Text style={styles.modalDoneButtonText}>Done</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1573,199 +1135,107 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 20,
   },
-  skeletonCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+  // Skeleton Loader Styles
+  skeletonContent: {
+    flex: 1,
   },
-  skeletonLineWide: {
-    height: 18,
+  skeletonLine: {
     backgroundColor: '#e2e8f0',
-    borderRadius: 10,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  skeletonLineTitle: {
+    width: '70%',
+    height: 22,
+    marginBottom: 6,
+  },
+  skeletonLineSubtitle: {
+    width: '50%',
+    height: 14,
+    marginBottom: 0,
+  },
+  skeletonLineDetail1: {
+    width: '85%',
+    height: 14,
+  },
+  skeletonLineDetail2: {
+    width: '70%',
+    height: 14,
+    marginBottom: 0,
+  },
+  skeletonButtonSmall: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    width: 80,
+    height: 36,
+  },
+  skeletonBadge: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 20,
+    width: 120,
+    height: 28,
+  },
+  skeletonInputGroup: {
+    marginBottom: 16,
+  },
+  skeletonLabel: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 6,
+    width: '40%',
+    height: 14,
+    marginBottom: 8,
+  },
+  skeletonInput: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 16,
+    height: 48,
+    width: '100%',
+  },
+  skeletonTextArea: {
+    height: 110,
+  },
+  skeletonSelectInput: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 16,
+    height: 48,
+    width: '100%',
+    marginBottom: 16,
+  },
+  skeletonSubcategoryRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 12,
   },
-  skeletonLineShort: {
-    height: 12,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 8,
-    width: '60%',
-  },
-  skeletonSpacer: {
-    height: 20,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  skeletonChip: {
+  skeletonSubcategoryInput: {
     flex: 1,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#e2e8f0',
   },
-  skeletonChipHalf: {
-    flex: 0.6,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#e2e8f0',
-  },
-  skeletonPortfolioWrapper: {
+  skeletonChipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    gap: 8,
+  },
+  skeletonChip: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 16,
+    width: 100,
+    height: 32,
   },
   skeletonPortfolioItem: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 16,
     width: '30%',
     aspectRatio: 1,
-    borderRadius: 16,
-    backgroundColor: '#e2e8f0',
   },
-  skeletonHeaderButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#e2e8f0',
+  skeletonLineWithMargin: {
+    marginBottom: 16,
   },
-  skeletonHeaderTitle: {
+  skeletonContentFlex: {
     flex: 1,
-    height: 18,
-    borderRadius: 10,
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 20,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  editImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#fdf2f8',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  editImageButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ec4899',
-  },
-  videoContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    borderRadius: 16,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#e2e8f0',
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  videoThumbnailPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  videoPlayButton: {
-    width: 60,
+  bottomSpacer: {
     height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(236, 72, 153, 0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
   },
-  videoDuration: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  deleteVideoButton: {
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#fee2e2',
-  },
-  addVideoButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#fbcfe8',
-    borderStyle: 'dashed',
-    backgroundColor: '#fdf2f8',
-  },
-  addVideoButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ec4899',
-  },
-  videoInfoRow: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
-  videoInfoText: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-  },
-  videoHintText: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  premiumFeatureBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-    backgroundColor: '#fdf2f8',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#fbcfe8',
-  },
-  premiumFeatureTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  premiumFeatureText: {
-    fontSize: 13,
-    color: '#64748b',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1775,14 +1245,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '90%',
+    maxHeight: '80%',
     paddingBottom: 20,
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
   },
@@ -1791,135 +1263,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0f172a',
   },
-  modalScrollView: {
-    maxHeight: 400,
-    padding: 20,
-  },
-  modalImageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  modalImageItem: {
-    width: '47%',
-    aspectRatio: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#e2e8f0',
-  },
-  modalImage: {
-    width: '100%',
-    height: '100%',
-  },
-  modalDeleteButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
-    borderRadius: 12,
-    padding: 8,
-  },
-  modalDeleteButtonDisabled: {
-    opacity: 0.6,
-  },
-  selectedIndicator: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 12,
+  modalCloseButton: {
     padding: 4,
   },
-  modalFooter: {
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    gap: 12,
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
-  modalAddButton: {
+  modalListContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  subcategoryItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#ec4899',
+    justifyContent: 'space-between',
     paddingVertical: 14,
-    borderRadius: 16,
-  },
-  modalAddButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  modalCloseButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  modalCloseButtonText: {
-    color: '#64748b',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginTop: 16,
-  },
-  emptyStateSubtext: {
-    fontSize: 13,
-    color: '#64748b',
-    marginTop: 4,
-  },
-  subscriptionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    backgroundColor: '#f8fafc',
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  subcategoryItemSelected: {
     backgroundColor: '#fdf2f8',
-    borderWidth: 1,
-    borderColor: '#fbcfe8',
+    borderColor: '#ec4899',
   },
-  subscriptionButtonText: {
+  subcategoryItemText: {
     fontSize: 15,
-    fontWeight: '600',
+    color: '#334155',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
+  subcategoryItemTextSelected: {
     color: '#ec4899',
+    fontWeight: '600',
   },
-  logoutSection: {
-    marginTop: 24,
-    marginHorizontal: 20,
-    marginBottom: 12,
-  },
-  logoutButton: {
-    flexDirection: 'row',
+  modalLoadingContainer: {
+    paddingVertical: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 16,
+  },
+  modalLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#64748b',
+  },
+  modalEmptyContainer: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  modalEmptyText: {
+    fontSize: 15,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalEmptySubtext: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  modalDoneButton: {
+    backgroundColor: '#ec4899',
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#fee2e2',
-    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  deleteAccountButton: {
-    borderColor: '#fee2e2',
-    backgroundColor: '#fff5f5',
-  },
-  logoutText: {
+  modalDoneButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
-    color: '#ef4444',
-  },
-  bottomSpacer: {
-    height: 40,
   },
 });
 

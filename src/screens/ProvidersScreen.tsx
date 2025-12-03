@@ -94,18 +94,81 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
     setActiveCategory(selectedCategory);
   }, [selectedCategory]);
 
+  const getMockProviders = React.useCallback((): Provider[] => {
+    const mockProviders = [
+      {
+        id: '1',
+        user: { fullName: 'John Doe', email: 'john@example.com', phone: '+2348012345678', avatarUrl: '' },
+        businessName: "John's Plumbing Services",
+        category: activeCategory || 'plumbing',
+        subcategories: ['Pipe Repair', 'Leak Fix', 'Installation'],
+        locationCity: selectedLocation || 'Lagos',
+        locationState: 'Lagos State',
+        ratingAverage: 4.8,
+        ratingCount: 124,
+        startingPrice: 5000,
+        hourlyRate: 2000,
+        bio: 'Professional plumbing services with 10+ years experience',
+        verificationStatus: 'verified',
+        isAvailable: true,
+        estimatedArrival: '30 mins',
+        yearsOfExperience: 10,
+        brandImages: [],
+        isTopListed: true,
+      },
+      {
+        id: '2',
+        user: { fullName: 'Sarah Johnson', email: 'sarah@example.com', phone: '+2348012345679', avatarUrl: '' },
+        businessName: 'Clean & Shine Services',
+        category: activeCategory || 'cleaning',
+        subcategories: ['House Cleaning', 'Office Cleaning', 'Deep Clean'],
+        locationCity: selectedLocation || 'Lagos',
+        locationState: 'Lagos State',
+        ratingAverage: 4.9,
+        ratingCount: 89,
+        startingPrice: 3500,
+        hourlyRate: 1500,
+        bio: 'Reliable cleaning services for homes and offices',
+        verificationStatus: 'verified',
+        isAvailable: true,
+        estimatedArrival: '45 mins',
+        yearsOfExperience: 5,
+        brandImages: [],
+        isTopListed: false,
+      },
+      {
+        id: '3',
+        user: { fullName: 'Mike Wilson', email: 'mike@example.com', phone: '+2348012345680', avatarUrl: '' },
+        businessName: 'Electric Solutions',
+        category: activeCategory || 'electrical',
+        subcategories: ['Wiring', 'Repairs', 'Installation'],
+        locationCity: selectedLocation || 'Lagos',
+        locationState: 'Lagos State',
+        ratingAverage: 4.7,
+        ratingCount: 156,
+        startingPrice: 7000,
+        hourlyRate: 3000,
+        bio: 'Certified electrician with safety-first approach',
+        verificationStatus: 'verified',
+        isAvailable: false,
+        estimatedArrival: '1 hour',
+        yearsOfExperience: 8,
+        brandImages: [],
+        isTopListed: true,
+      },
+    ];
+    
+    return mockProviders.filter(provider => 
+      !activeCategory || provider.category === activeCategory
+    );
+  }, [activeCategory, selectedLocation]);
+
   const fetchProviders = React.useCallback(async () => {
     setIsLoading(true);
     try {
       const filters: ProviderFilters = {
         location: selectedLocation,
       };
-
-      console.log('[ProvidersScreen] Fetching providers with filters:', {
-        activeCategory,
-        filters,
-        selectedLocation,
-      });
 
       let data;
       if (activeCategory) {
@@ -114,75 +177,20 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
         data = await providerService.searchProviders(filters);
       }
       
-      console.log('[ProvidersScreen] API Response:', {
-        success: data.success,
-        hasProviders: !!data.data?.providers,
-        providerCount: data.data?.providers?.length || 0,
-        totalCount: data.data?.total || 0,
-      });
-
-      if (data.success && data.data?.providers && Array.isArray(data.data.providers)) {
-        const providersData = data.data.providers;
-        
-        // Log provider data including ratings
-        console.log('[ProvidersScreen] Provider data received:', {
-          count: providersData.length,
-          providers: providersData.map((p: any) => ({
-            id: p.id,
-            businessName: p.businessName,
-            category: p.category,
-            ratingAverage: p.ratingAverage,
-            ratingCount: p.ratingCount,
-            startingPrice: p.startingPrice,
-            hourlyRate: p.hourlyRate,
-            isAvailable: p.isAvailable,
-            isTopListed: p.isTopListed,
-            locationCity: p.locationCity,
-            locationState: p.locationState,
-          })),
-        });
-
-        // Log detailed rating information
-        providersData.forEach((provider: any, index: number) => {
-          console.log(`[ProvidersScreen] Provider ${index + 1} (${provider.businessName}):`, {
-            id: provider.id,
-            ratingAverage: provider.ratingAverage,
-            ratingCount: provider.ratingCount,
-            ratingAverageType: typeof provider.ratingAverage,
-            ratingCountType: typeof provider.ratingCount,
-            hasRatings: provider.ratingAverage !== undefined && provider.ratingCount !== undefined,
-          });
-        });
-
-        setProviders(providersData);
-        console.log('[ProvidersScreen] ✅ Using REAL provider data from API');
+      if (data.success && data.data?.providers) {
+        setProviders(data.data.providers);
       } else {
-        console.warn('[ProvidersScreen] ⚠️ No providers in API response, response structure:', {
-          success: data.success,
-          data: data.data,
-          message: (data as any).message || 'No message',
-        });
-        // Only use mock data if API explicitly returns no providers (not on error)
-        if (data.success && (!data.data?.providers || data.data.providers.length === 0)) {
-          console.log('[ProvidersScreen] API returned success but no providers, showing empty state');
-          setProviders([]);
-        } else {
-          console.warn('[ProvidersScreen] API response structure unexpected, using empty array');
-          setProviders([]);
-        }
+        // Fallback to mock data
+        setProviders(getMockProviders());
       }
     } catch (error) {
-      console.error('[ProvidersScreen] ❌ Error fetching providers:', error);
-      console.error('[ProvidersScreen] Error details:', {
-        message: (error as any)?.message,
-        stack: (error as any)?.stack,
-      });
-      // Don't use mock data on error, show empty state instead
-      setProviders([]);
+      console.error('Error fetching providers:', error);
+      // Fallback to mock data
+      setProviders(getMockProviders());
     } finally {
       setIsLoading(false);
     }
-  }, [activeCategory, selectedLocation]);
+  }, [activeCategory, selectedLocation, getMockProviders]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -194,15 +202,6 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   }, [fetchProviders]);
 
   const applyFilters = React.useCallback(() => {
-    console.log('[ProvidersScreen] Applying filters:', {
-      providerCount: providers.length,
-      ratingFilter,
-      priceFilter,
-      availabilityFilter,
-      sortBy,
-      sortOrder,
-    });
-
     // Apply filters using the service
     const filters: Partial<ProviderFilters> = {
       minRating: ratingFilter || undefined,
@@ -213,24 +212,8 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
 
     let filtered = providerService.filterProviders(providers, filters);
     
-    console.log('[ProvidersScreen] After filtering:', {
-      filteredCount: filtered.length,
-      filtersApplied: filters,
-    });
-    
     // Apply sorting
     const sorted = providerService.sortProviders(filtered, sortBy, sortOrder);
-    
-    console.log('[ProvidersScreen] After sorting:', {
-      sortedCount: sorted.length,
-      sortBy,
-      sortOrder,
-      sampleRatings: sorted.slice(0, 3).map(p => ({
-        name: p.businessName,
-        rating: p.ratingAverage,
-        count: p.ratingCount,
-      })),
-    });
     
     setFilteredProviders(sorted);
   }, [providers, ratingFilter, priceFilter, availabilityFilter, sortBy, sortOrder]);
@@ -389,16 +372,14 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
           }
         >
           {/* Quick Filters */}
-          <ScrollView
+          {/* <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.quickFiltersContainer}
           >
             {quickFilterOptions.map((option) => {
               const Icon = option.icon || Wrench;
-              const isActive =
-                option.value === activeCategory ||
-                (!option.value && !activeCategory);
+              const isActive = option.value === activeCategory || (!option.value && !activeCategory);
               return (
                 <TouchableOpacity
                   key={option.label}
@@ -424,7 +405,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </ScrollView> */}
 
           {/* Filters */}
           <View

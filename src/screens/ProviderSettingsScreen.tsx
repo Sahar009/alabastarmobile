@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   RefreshControl,
@@ -10,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -28,7 +28,6 @@ interface ProviderSettingsScreenProps {
 
 interface NotificationPreferencesState {
   email: boolean;
-  sms: boolean;
   push: boolean;
 }
 
@@ -40,7 +39,6 @@ interface PrivacyPreferencesState {
 
 const DEFAULT_NOTIFICATION_PREFS: NotificationPreferencesState = {
   email: true,
-  sms: false,
   push: true,
 };
 
@@ -48,6 +46,101 @@ const DEFAULT_PRIVACY_PREFS: PrivacyPreferencesState = {
   showProfile: true,
   showContactInfo: true,
   showPortfolio: true,
+};
+
+// Skeleton Loader Component
+const SettingsSkeletonLoader: React.FC = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const opacity = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      {/* Notification Preferences Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+        </View>
+
+        {[1, 2].map((item) => (
+          <View key={item} style={styles.toggleRowSimple}>
+            <View style={styles.skeletonContent}>
+              <Animated.View style={[styles.skeletonLine, styles.skeletonToggleLabel, { opacity }]} />
+              <Animated.View style={[styles.skeletonLine, styles.skeletonToggleDescription, { opacity }]} />
+            </View>
+            <Animated.View style={[styles.skeletonSwitch, { opacity }]} />
+          </View>
+        ))}
+      </View>
+
+      {/* Privacy Controls Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+        </View>
+
+        {[1, 2, 3].map((item) => (
+          <View key={item} style={styles.toggleRowSimple}>
+            <View style={styles.skeletonContent}>
+              <Animated.View style={[styles.skeletonLine, styles.skeletonToggleLabel, { opacity }]} />
+              <Animated.View style={[styles.skeletonLine, styles.skeletonToggleDescription, { opacity }]} />
+            </View>
+            <Animated.View style={[styles.skeletonSwitch, { opacity }]} />
+          </View>
+        ))}
+      </View>
+
+      {/* Subscription Skeleton */}
+      <View style={styles.sectionCard}>
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonContent}>
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+            <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+          </View>
+        </View>
+
+        {[1, 2].map((item) => (
+          <View key={item} style={styles.subscriptionAction}>
+            <Animated.View style={[styles.skeletonIcon, { opacity }]} />
+            <View style={styles.skeletonActionContent}>
+              <Animated.View style={[styles.skeletonLine, styles.skeletonActionTitle, { opacity }]} />
+              <Animated.View style={[styles.skeletonLine, styles.skeletonActionSubtitle, { opacity }]} />
+            </View>
+            <Animated.View style={[styles.skeletonChevron, { opacity }]} />
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.bottomSpacer} />
+    </ScrollView>
+  );
 };
 
 const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack, onNavigate }) => {
@@ -69,7 +162,6 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
         if (data.notifications) {
           setNotificationPreferences({
             email: Boolean(data.notifications.email ?? DEFAULT_NOTIFICATION_PREFS.email),
-            sms: Boolean(data.notifications.sms ?? DEFAULT_NOTIFICATION_PREFS.sms),
             push: Boolean(data.notifications.push ?? DEFAULT_NOTIFICATION_PREFS.push),
           });
         } else {
@@ -108,10 +200,18 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
     setNotificationPreferences(updated);
 
     try {
-      const response = await apiService.updateProviderNotificationSettings(updated);
+      // Convert to API format (without SMS)
+      const response = await apiService.updateProviderNotificationSettings({
+        email: updated.email,
+        sms: false, // SMS removed from UI but still required by API format
+        push: updated.push,
+      });
+      
       if (!response.success) {
         throw new Error(response.message || 'Unable to update notifications');
       }
+      
+      // Success - toggle already updated, no need to show alert
     } catch (error: any) {
       console.error('Notification preference update error:', error);
       setNotificationPreferences(previous);
@@ -129,6 +229,8 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
       if (!response.success) {
         throw new Error(response.message || 'Unable to update privacy settings');
       }
+      
+      // Success - toggle already updated, no need to show alert
     } catch (error: any) {
       console.error('Privacy preference update error:', error);
       setPrivacyPreferences(previous);
@@ -141,7 +243,7 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
   };
 
   const handleSupport = async () => {
-    const supportEmail = 'mailto:support@alabastar.com?subject=Provider%20Support%20Request';
+    const supportEmail = 'mailto:support@alabastar.ng?subject=Provider%20Support%20Request';
     try {
       const supported = await Linking.canOpenURL(supportEmail);
       if (supported) {
@@ -151,7 +253,7 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
       }
     } catch (error: any) {
       console.error('Support link error:', error);
-      Alert.alert('Support', 'Contact support@alabastar.com if you need help with billing or subscriptions.');
+      Alert.alert('Support', 'Contact support@alabastar.ng if you need help with billing or subscriptions.');
     }
   };
 
@@ -175,17 +277,23 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        <View style={styles.sectionCard}>
+      {loading && !refreshing ? (
+        <SettingsSkeletonLoader />
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
+          <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Notification Preferences</Text>
           <Text style={styles.sectionSubtitle}>Choose how you stay informed about bookings and messages</Text>
 
           <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>Email alerts</Text>
+            <View style={styles.toggleLabelContainer}>
+              <Text style={styles.toggleLabel}>Email notifications</Text>
+              <Text style={styles.toggleDescription}>Receive booking updates via email</Text>
+            </View>
             <Switch
               value={notificationPreferences.email}
               onValueChange={() => toggleNotificationPreference('email')}
@@ -195,17 +303,10 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
           </View>
 
           <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>SMS notifications</Text>
-            <Switch
-              value={notificationPreferences.sms}
-              onValueChange={() => toggleNotificationPreference('sms')}
-              trackColor={{ false: '#cbd5f5', true: '#ec4899' }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>Push notifications</Text>
+            <View style={styles.toggleLabelContainer}>
+              <Text style={styles.toggleLabel}>Push notifications</Text>
+              <Text style={styles.toggleDescription}>Get instant alerts on your device</Text>
+            </View>
             <Switch
               value={notificationPreferences.push}
               onValueChange={() => toggleNotificationPreference('push')}
@@ -220,7 +321,10 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
           <Text style={styles.sectionSubtitle}>Control how your profile information is displayed</Text>
 
           <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>Show profile publicly</Text>
+            <View style={styles.toggleLabelContainer}>
+              <Text style={styles.toggleLabel}>Show profile publicly</Text>
+              <Text style={styles.toggleDescription}>Allow customers to find your profile in search</Text>
+            </View>
             <Switch
               value={privacyPreferences.showProfile}
               onValueChange={() => togglePrivacyPreference('showProfile')}
@@ -230,7 +334,10 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
           </View>
 
           <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>Display contact info</Text>
+            <View style={styles.toggleLabelContainer}>
+              <Text style={styles.toggleLabel}>Display contact info</Text>
+              <Text style={styles.toggleDescription}>Show your phone number and email to customers</Text>
+            </View>
             <Switch
               value={privacyPreferences.showContactInfo}
               onValueChange={() => togglePrivacyPreference('showContactInfo')}
@@ -240,7 +347,10 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
           </View>
 
           <View style={styles.toggleRowSimple}>
-            <Text style={styles.toggleLabel}>Show portfolio images</Text>
+            <View style={styles.toggleLabelContainer}>
+              <Text style={styles.toggleLabel}>Show portfolio images</Text>
+              <Text style={styles.toggleDescription}>Display your work gallery on your profile</Text>
+            </View>
             <Switch
               value={privacyPreferences.showPortfolio}
               onValueChange={() => togglePrivacyPreference('showPortfolio')}
@@ -274,12 +384,7 @@ const ProviderSettingsScreen: React.FC<ProviderSettingsScreenProps> = ({ onBack,
         </View>
 
         <View style={styles.bottomSpacer} />
-      </ScrollView>
-
-      {loading && !refreshing && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ec4899" />
-        </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -374,10 +479,20 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
+  toggleLabelContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
   toggleLabel: {
     fontSize: 15,
     fontWeight: '600',
     color: '#0f172a',
+    marginBottom: 2,
+  },
+  toggleDescription: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 16,
   },
   toggleHint: {
     fontSize: 12,
@@ -416,6 +531,70 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 60,
+  },
+  // Skeleton Loader Styles
+  skeletonHeader: {
+    marginBottom: 16,
+  },
+  skeletonContent: {
+    flex: 1,
+  },
+  skeletonLine: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  skeletonLineTitle: {
+    width: '60%',
+    height: 22,
+    marginBottom: 6,
+  },
+  skeletonLineSubtitle: {
+    width: '45%',
+    height: 14,
+    marginBottom: 0,
+  },
+  skeletonToggleLabel: {
+    width: '70%',
+    height: 18,
+    marginBottom: 6,
+  },
+  skeletonToggleDescription: {
+    width: '50%',
+    height: 14,
+    marginBottom: 0,
+  },
+  skeletonSwitch: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 16,
+    width: 51,
+    height: 31,
+  },
+  skeletonActionTitle: {
+    width: '65%',
+    height: 18,
+    marginBottom: 6,
+  },
+  skeletonActionSubtitle: {
+    width: '85%',
+    height: 14,
+    marginBottom: 0,
+  },
+  skeletonActionContent: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  skeletonIcon: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    width: 18,
+    height: 18,
+  },
+  skeletonChevron: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 4,
+    width: 18,
+    height: 18,
   },
 });
 

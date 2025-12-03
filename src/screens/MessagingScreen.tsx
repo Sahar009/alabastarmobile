@@ -36,14 +36,14 @@ const { width } = Dimensions.get('window');
 
 interface MessagingScreenProps {
   onNavigate?: (screen: string) => void;
-  userData?: any; // Reserved for future use
+  userData?: any;
   bookingId?: string;
   recipientId?: string;
 }
 
 const MessagingScreen: React.FC<MessagingScreenProps> = ({ 
   onNavigate, 
-  userData: _userData,
+  userData,
   bookingId,
   recipientId 
 }) => {
@@ -264,7 +264,6 @@ const MessagingScreen: React.FC<MessagingScreenProps> = ({
       await apiService.loadToken();
       
       const token = await AsyncStorage.getItem('token');
-      const userJson = await AsyncStorage.getItem('user');
       
       if (!token) {
         Alert.alert('Error', 'Please login to continue');
@@ -272,13 +271,24 @@ const MessagingScreen: React.FC<MessagingScreenProps> = ({
         return;
       }
 
-      if (!userJson) {
-        Alert.alert('Error', 'User data not found');
+      // Try to get user data from prop first, then from AsyncStorage
+      let user = null;
+      if (userData) {
+        // Handle both nested (userData.user) and flat (userData) structures
+        user = userData.user || userData;
+      } else {
+        const userJson = await AsyncStorage.getItem('user');
+        if (userJson) {
+          user = JSON.parse(userJson);
+        }
+      }
+
+      if (!user || !user.id) {
+        Alert.alert('Error', 'User data not found. Please login again.');
         onNavigate?.('home');
         return;
       }
 
-      const user = JSON.parse(userJson);
       setCurrentUserId(user.id);
       setCurrentUserRole(user.role || 'customer');
 

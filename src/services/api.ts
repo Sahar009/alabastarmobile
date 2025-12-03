@@ -1,6 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // API Configuration
-// export const API_BASE_URL = 'http://localhost:8000/api'; // Update this to your backend URL
-export const API_BASE_URL = "https://alabastar-backend.onrender.com/api"
+export const API_BASE_URL = 'https://backend.alabastar.ng/api';
+
 // API Response Interface
 interface ApiResponse<T = any> {
   success: boolean;
@@ -17,7 +19,6 @@ export interface User {
   role: 'customer' | 'provider';
   status: string;
   provider: string;
-  avatarUrl?: string;
 }
 
 export interface Customer {
@@ -50,7 +51,7 @@ export interface LoginData {
 
 // API Service Class
 class ApiService {
-  private baseURL: string;
+  public baseURL: string;
   private token: string | null = null;
 
   constructor(baseURL: string = API_BASE_URL) {
@@ -60,35 +61,41 @@ class ApiService {
   // Set authentication token
   async setToken(token: string | null) {
     this.token = token;
-    // Store token in AsyncStorage for persistence
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    if (token) {
-      await AsyncStorage.setItem('token', token);
-    } else {
-      await AsyncStorage.removeItem('token');
+    try {
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+      } else {
+        await AsyncStorage.removeItem('token');
+      }
+    } catch (error) {
+      console.error('Error saving token:', error);
     }
   }
 
-  // Store user data
-  async setUser(user: any) {
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    if (user) {
-      await AsyncStorage.setItem('user', JSON.stringify(user));
-    } else {
-      await AsyncStorage.removeItem('user');
-    }
-  }
-
-  // Load token from AsyncStorage on app initialization
-  async loadToken() {
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  // Load token from AsyncStorage
+  async loadToken(): Promise<string | null> {
     try {
       const token = await AsyncStorage.getItem('token');
-      this.token = token;
+      if (token) {
+        this.token = token;
+      }
       return token;
     } catch (error) {
       console.error('Error loading token:', error);
       return null;
+    }
+  }
+
+  // Set user data
+  async setUser(user: User | null) {
+    try {
+      if (user) {
+        await AsyncStorage.setItem('user', JSON.stringify(user));
+      } else {
+        await AsyncStorage.removeItem('user');
+      }
+    } catch (error) {
+      console.error('Error saving user:', error);
     }
   }
 
@@ -110,121 +117,27 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
-    // Always ensure token is loaded from AsyncStorage before making requests
-    // This ensures tokens persist across app restarts and after registration
-    if (!this.token) {
-      await this.loadToken();
-    }
-    
     const url = `${this.baseURL}${endpoint}`;
-    const method = options.method || 'GET';
-    
-    // Immediate log to verify function is called
-    console.warn('🚀 API Request initiated:', method, url);
     
     const config: RequestInit = {
       ...options,
       headers: {
         ...this.getHeaders(),
-        ...options.headers,
+        ...(options.headers as Record<string, string> || {}),
       },
     };
 
-    // Log request details
-    const requestBody = options.body ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body) : null;
-    const headersObj = config.headers as Record<string, string>;
-    
-    // Use console.warn for visibility in Metro terminal
-    console.warn('\n========================================');
-    console.warn('📤 API REQUEST');
-    console.warn('========================================');
-    console.warn('Method:', method);
-    console.warn('URL:', url);
-    console.warn('Headers:', JSON.stringify({
-      ...headersObj,
-      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
-    }, null, 2));
-    if (requestBody) {
-      console.warn('Body:', JSON.stringify(requestBody, null, 2));
-    }
-    console.warn('Timestamp:', new Date().toISOString());
-    console.warn('========================================\n');
-    
-    // Also log to console.log for DevTools
-    console.log('\n========================================');
-    console.log('📤 API REQUEST');
-    console.log('========================================');
-    console.log('Method:', method);
-    console.log('URL:', url);
-    console.log('Headers:', {
-      ...headersObj,
-      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
-    });
-    if (requestBody) {
-      console.log('Body:', JSON.stringify(requestBody, null, 2));
-    }
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('========================================\n');
-
-    const startTime = Date.now();
-
     try {
       const response = await fetch(url, config);
-      const responseTime = Date.now() - startTime;
       const data = await response.json();
 
-      // Log response details
-      console.warn('\n========================================');
-      console.warn('📥 API RESPONSE');
-      console.warn('========================================');
-      console.warn('Method:', method);
-      console.warn('URL:', url);
-      console.warn('Status:', response.status, response.statusText);
-      console.warn('Response Time:', `${responseTime}ms`);
-      console.warn('Response Data:', JSON.stringify(data, null, 2));
-      console.warn('Timestamp:', new Date().toISOString());
-      console.warn('========================================\n');
-      
-      // Also log to console.log for DevTools
-      console.log('\n========================================');
-      console.log('📥 API RESPONSE');
-      console.log('========================================');
-      console.log('Method:', method);
-      console.log('URL:', url);
-      console.log('Status:', response.status, response.statusText);
-      console.log('Response Time:', `${responseTime}ms`);
-      console.log('Response Data:', JSON.stringify(data, null, 2));
-      console.log('Timestamp:', new Date().toISOString());
-      console.log('========================================\n');
-
       if (!response.ok) {
-        console.error('\n========================================');
-        console.error('❌ API ERROR RESPONSE');
-        console.error('========================================');
-        console.error('Method:', method);
-        console.error('URL:', url);
-        console.error('Status:', response.status);
-        console.error('Error:', data.message || `HTTP error! status: ${response.status}`);
-        console.error('Response Data:', JSON.stringify(data, null, 2));
-        console.error('========================================\n');
         throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
 
       return data;
     } catch (error) {
-      const responseTime = Date.now() - startTime;
-      console.error('\n========================================');
-      console.error('❌ API REQUEST FAILED');
-      console.error('========================================');
-      console.error('Method:', method);
-      console.error('URL:', url);
-      console.error('Response Time:', `${responseTime}ms`);
-      console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
-      if (error instanceof Error && error.stack) {
-        console.error('Stack:', error.stack);
-      }
-      console.error('Timestamp:', new Date().toISOString());
-      console.error('========================================\n');
+      console.error('API request failed:', error);
       throw error;
     }
   }
@@ -267,129 +180,6 @@ class ApiService {
     });
   }
 
-  async uploadProfilePicture(formData: FormData): Promise<ApiResponse<{ avatarUrl: string; user?: User }>> {
-    const url = `${this.baseURL}/auth/profile/picture`;
-    
-    const config: RequestInit = {
-      method: 'POST',
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
-      body: formData,
-    };
-
-    const headersObj = config.headers as Record<string, string>;
-    
-    // Use console.warn for visibility in Metro terminal
-    console.warn('\n========================================');
-    console.warn('📤 API REQUEST (FormData)');
-    console.warn('========================================');
-    console.warn('Method: POST');
-    console.warn('URL:', url);
-    console.warn('Headers:', JSON.stringify({
-      ...headersObj,
-      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
-    }, null, 2));
-    console.warn('Body: [FormData - file upload]');
-    console.warn('Timestamp:', new Date().toISOString());
-    console.warn('========================================\n');
-    
-    // Also log to console.log for DevTools
-    console.log('\n========================================');
-    console.log('📤 API REQUEST (FormData)');
-    console.log('========================================');
-    console.log('Method: POST');
-    console.log('URL:', url);
-    console.log('Headers:', {
-      ...headersObj,
-      Authorization: headersObj?.Authorization ? 'Bearer ***' : undefined,
-    });
-    console.log('Body: [FormData - file upload]');
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('========================================\n');
-
-    const startTime = Date.now();
-
-    try {
-      const response = await fetch(url, config);
-      const responseTime = Date.now() - startTime;
-      const data = await response.json();
-
-      console.warn('\n========================================');
-      console.warn('📥 API RESPONSE');
-      console.warn('========================================');
-      console.warn('Method: POST');
-      console.warn('URL:', url);
-      console.warn('Status:', response.status, response.statusText);
-      console.warn('Response Time:', `${responseTime}ms`);
-      console.warn('Response Data:', JSON.stringify(data, null, 2));
-      console.warn('Timestamp:', new Date().toISOString());
-      console.warn('========================================\n');
-      
-      // Also log to console.log for DevTools
-      console.log('\n========================================');
-      console.log('📥 API RESPONSE');
-      console.log('========================================');
-      console.log('Method: POST');
-      console.log('URL:', url);
-      console.log('Status:', response.status, response.statusText);
-      console.log('Response Time:', `${responseTime}ms`);
-      console.log('Response Data:', JSON.stringify(data, null, 2));
-      console.log('Timestamp:', new Date().toISOString());
-      console.log('========================================\n');
-
-      if (!response.ok) {
-        console.error('\n========================================');
-        console.error('❌ API ERROR RESPONSE');
-        console.error('========================================');
-        console.error('Method: POST');
-        console.error('URL:', url);
-        console.error('Status:', response.status);
-        console.error('Error:', data.message || `HTTP error! status: ${response.status}`);
-        console.error('Response Data:', JSON.stringify(data, null, 2));
-        console.error('========================================\n');
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return data;
-    } catch (error) {
-      const responseTime = Date.now() - startTime;
-      console.error('\n========================================');
-      console.error('❌ API REQUEST FAILED');
-      console.error('========================================');
-      console.error('Method: POST');
-      console.error('URL:', url);
-      console.error('Response Time:', `${responseTime}ms`);
-      console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
-      if (error instanceof Error && error.stack) {
-        console.error('Stack:', error.stack);
-      }
-      console.error('Timestamp:', new Date().toISOString());
-      console.error('========================================\n');
-      throw error;
-    }
-  }
-
-  async getCustomerProfile(): Promise<ApiResponse<Customer>> {
-    return this.request<Customer>('/customers/me');
-  }
-
-  async updateCustomerPreferences(preferences: any): Promise<ApiResponse<Customer>> {
-    return this.request<Customer>('/customers/preferences', {
-      method: 'PUT',
-      body: JSON.stringify({ preferences }),
-    });
-  }
-
-  async updateNotificationSettings(settings: {
-    email: boolean;
-    sms: boolean;
-    push: boolean;
-  }): Promise<ApiResponse<Customer>> {
-    return this.request<Customer>('/customers/notifications', {
-      method: 'PUT',
-      body: JSON.stringify({ notificationSettings: settings }),
-    });
-  }
-
   async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
     return this.request('/auth/change-password', {
       method: 'PUT',
@@ -403,384 +193,543 @@ class ApiService {
     });
   }
 
-  // Notification methods
-  async getNotifications(params?: {
-    page?: number;
-    limit?: number;
-    isRead?: boolean;
-    category?: string;
-  }): Promise<ApiResponse<any>> {
-    const queryString = new URLSearchParams(
-      Object.entries(params || {}).reduce((acc, [key, value]) => {
-        if (value !== undefined) {
-          acc[key] = String(value);
-        }
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString();
-    return this.request(`/notifications${queryString ? `?${queryString}` : ''}`);
-  }
-
-  async getUnreadNotificationCount(): Promise<ApiResponse<{ unreadCount: number }>> {
-    // Token will be auto-loaded by request() method if missing
-    return this.request<{ unreadCount: number }>(`/notifications/unread-count`, {
-      method: 'GET',
-    });
-  }
-
-  async markNotificationAsRead(notificationId: string): Promise<ApiResponse> {
-    return this.request(`/notifications/${notificationId}/read`, {
-      method: 'PATCH',
-    });
-  }
-
-  async markAllNotificationsAsRead(): Promise<ApiResponse> {
-    return this.request('/notifications/mark-all-read', {
-      method: 'PATCH',
-    });
-  }
-
-  async deleteNotification(notificationId: string): Promise<ApiResponse> {
-    return this.request(`/notifications/${notificationId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  // Booking methods
-  async getMyBookings(params?: {
-    page?: number;
-    limit?: number;
-    status?: string;
-    search?: string;
-    userType?: 'customer' | 'provider';
-  }): Promise<ApiResponse<any>> {
-    const { userType = 'customer', ...restParams } = params || {};
-
-    const queryString = new URLSearchParams(
-      Object.entries(restParams).reduce((acc, [key, value]) => {
-        if (value !== undefined && value !== null) {
-          acc[key] = String(value);
-        }
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString();
-
-    return this.request(`/bookings?userType=${userType}${queryString ? `&${queryString}` : ''}`);
-  }
-
-  async getBookingById(bookingId: string): Promise<ApiResponse<any>> {
-    return this.request(`/bookings/${bookingId}`);
-  }
-
-  async getProviderProfile(): Promise<ApiResponse<any>> {
-    return this.request('/providers/profile');
-  }
-
-  async updateProviderProfile(payload: any): Promise<ApiResponse<any>> {
-    return this.request('/providers/profile', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  async addProviderPortfolioImage(url: string): Promise<ApiResponse<any>> {
-    return this.request('/providers/portfolio', {
+  // Google Authentication
+  async googleAuth(googleUserData: {
+    email: string;
+    name: string;
+    picture?: string;
+    googleId: string;
+  }): Promise<ApiResponse<AuthResponse>> {
+    return this.request<AuthResponse>('/auth/google', {
       method: 'POST',
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(googleUserData),
     });
   }
 
-  async removeProviderPortfolioImage(imageUrl: string): Promise<ApiResponse<any>> {
-    return this.request('/providers/portfolio', {
-      method: 'DELETE',
-      body: JSON.stringify({ url: imageUrl }),
-    });
-  }
-
-  async uploadProviderDocument(providerId: string, formData: FormData): Promise<ApiResponse<any>> {
-    await this.loadToken();
-    const url = `${this.baseURL}/providers/${providerId}/documents`;
-    
-    const config: RequestInit = {
-      method: 'POST',
-      headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
-      body: formData,
-    };
-
-    const startTime = Date.now();
-    try {
-      const response = await fetch(url, config);
-      const responseTime = Date.now() - startTime;
-      const data = await response.json();
-
-      console.log('📥 Upload document response:', {
-        status: response.status,
-        responseTime: `${responseTime}ms`,
-        data,
-      });
-
-      if (!response.ok) {
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return data;
-    } catch (error) {
-      console.error('❌ Upload document error:', error);
-      throw error;
-    }
-  }
-
-  async deleteProviderDocument(providerId: string, documentId: string): Promise<ApiResponse> {
-    return this.request(`/providers/${providerId}/documents/${documentId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getProviderFeatureLimits(providerId: string): Promise<ApiResponse<any>> {
-    return this.request(`/providers/${providerId}/feature-limits`);
-  }
-
-  async uploadProviderVideo(providerId: string, videoData: {
-    videoUrl: string;
-    videoThumbnail?: string;
-    videoDuration: number;
-  }): Promise<ApiResponse<any>> {
-    return this.request(`/providers/${providerId}/video`, {
-      method: 'POST',
-      body: JSON.stringify(videoData),
-    });
-  }
-
-  async deleteProviderVideo(providerId: string): Promise<ApiResponse> {
-    return this.request(`/providers/${providerId}/video`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getProviderSettings(): Promise<ApiResponse<any>> {
-    return this.request('/providers/settings');
-  }
-
-  async updateProviderSettings(payload: any): Promise<ApiResponse<any>> {
-    return this.request('/providers/settings', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  async updateProviderNotificationSettings(settings: Record<string, boolean>): Promise<ApiResponse<any>> {
-    return this.request('/providers/settings/notifications', {
-      method: 'PUT',
-      body: JSON.stringify(settings),
-    });
-  }
-
-  async updateProviderPrivacySettings(settings: Record<string, boolean>): Promise<ApiResponse<any>> {
-    return this.request('/providers/settings/privacy', {
-      method: 'PUT',
-      body: JSON.stringify(settings),
-    });
-  }
-
-  async getProviderSubscription(): Promise<ApiResponse<any>> {
-    return this.request('/subscriptions/my-subscription');
-  }
-
-  async getProviderSubscriptionHistory(): Promise<ApiResponse<any>> {
-    return this.request('/subscriptions/history');
-  }
-
-  async getSubscriptionPlans(): Promise<ApiResponse<any>> {
-    return this.request('/subscription-plans/plans');
-  }
-
-  async initializeProviderSubscription(planId: string, options?: { callbackUrl?: string }): Promise<ApiResponse<any>> {
-    return this.request('/subscriptions/initialize-payment', {
-      method: 'POST',
-      body: JSON.stringify({ planId, callbackUrl: options?.callbackUrl }),
-    });
-  }
-
-  async cancelProviderSubscription(subscriptionId?: string): Promise<ApiResponse<any>> {
-    return this.request('/subscriptions/cancel', {
-      method: 'POST',
-      body: JSON.stringify({ subscriptionId }),
-    });
-  }
-
-  async reactivateProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
-    return this.request('/subscriptions/reactivate', {
-      method: 'POST',
-      body: JSON.stringify({ subscriptionId }),
-    });
-  }
-
-  // Referral methods
-  async generateReferralCode(providerId?: string): Promise<ApiResponse<any>> {
-    if (providerId) {
-      return this.request(`/referrals/generate/${providerId}`, {
-        method: 'POST',
-      });
-    }
-    return this.request('/referrals/generate', {
-      method: 'POST',
-    });
-  }
-
-  async getReferralStats(providerId?: string): Promise<ApiResponse<any>> {
-    if (providerId) {
-      return this.request(`/referrals/stats/${providerId}`);
-    }
-    return this.request('/referrals/stats');
-  }
-
-  async getReferralHistory(params?: {
-    page?: number;
-    limit?: number;
-  }): Promise<ApiResponse<any>> {
-    const queryString = new URLSearchParams(
-      Object.entries(params || {}).reduce((acc, [key, value]) => {
-        if (value !== undefined && value !== null) {
-          acc[key] = String(value);
-        }
-        return acc;
-      }, {} as Record<string, string>)
-    ).toString();
-    return this.request(`/referrals/history${queryString ? `?${queryString}` : ''}`);
-  }
-
-  async validateReferralCode(code: string): Promise<ApiResponse<any>> {
-    return this.request(`/referrals/validate/${code}`);
-  }
-
-  async updateBookingStatus(bookingId: string, status: string): Promise<ApiResponse> {
-    return this.request(`/bookings/${bookingId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-  }
-
-  async cancelBooking(bookingId: string, reason?: string): Promise<ApiResponse> {
-    return this.request(`/bookings/${bookingId}/cancel`, {
-      method: 'PATCH',
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async createBooking(payload: {
-    providerId: string;
-    serviceId?: string;
-    scheduledAt: string;
-    locationAddress: string;
-    locationCity?: string;
-    locationState?: string;
-    latitude?: number;
-    longitude?: number;
-    notes?: string;
-  }): Promise<ApiResponse<any>> {
-    return this.request('/bookings', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  // Messaging methods
-  async sendMessage(recipientId: string, content: string, bookingId?: string): Promise<ApiResponse> {
-    return this.request('/messages/send', {
-      method: 'POST',
-      body: JSON.stringify({ recipientId, content, bookingId }),
-    });
-  }
-
-  async getMessages(recipientId: string, page = 1, limit = 50): Promise<ApiResponse> {
-    return this.request(`/messages?recipientId=${recipientId}&page=${page}&limit=${limit}`);
-  }
-
-  // Review methods
-  async submitReview(bookingId: string, rating: number, comment?: string): Promise<ApiResponse> {
-    return this.request('/reviews', {
-      method: 'POST',
-      body: JSON.stringify({ bookingId, rating, comment }),
-    });
-  }
-
-  // Firebase/Google Authentication
-  // This endpoint accepts both Firebase ID tokens and Google ID tokens
-  // Firebase Admin SDK can verify both types of tokens
-  async firebaseAuth(authData: {
+  // Firebase Authentication (for future implementation)
+  async firebaseAuth(firebaseData: {
     idToken: string;
-    email?: string;
+    email: string;
     displayName?: string;
     photoURL?: string;
-    uid?: string;
+    uid: string;
     phone?: string;
   }): Promise<ApiResponse<AuthResponse>> {
     return this.request<AuthResponse>('/auth/firebase', {
       method: 'POST',
-      body: JSON.stringify(authData),
+      body: JSON.stringify(firebaseData),
     });
   }
 
-  // Earnings & Wallet APIs
-  async getEarningsStats(): Promise<ApiResponse> {
-    await this.loadToken();
-    return this.request<ApiResponse>('/earnings/stats', { method: 'GET' });
-  }
-
-  async getTransactions(params?: {
-    type?: string;
-    dateRange?: string;
-    search?: string;
+  // Booking Methods
+  async getMyBookings(params?: {
+    userType?: string;
+    status?: string;
     page?: number;
     limit?: number;
-  }): Promise<ApiResponse> {
-    await this.loadToken();
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> {
     const queryParams = new URLSearchParams();
-    if (params?.type) queryParams.append('type', params.type);
-    if (params?.dateRange) queryParams.append('dateRange', params.dateRange);
-    if (params?.search) queryParams.append('search', params.search);
-    if (params?.page) queryParams.append('page', params.page.toString());
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
-
+    if (params) {
+      if (params.userType) queryParams.append('userType', params.userType);
+      if (params.status) queryParams.append('status', params.status);
+      if (params.page) queryParams.append('page', params.page.toString());
+      if (params.limit) queryParams.append('limit', params.limit.toString());
+      if (params.startDate) queryParams.append('startDate', params.startDate);
+      if (params.endDate) queryParams.append('endDate', params.endDate);
+    }
+    
     const queryString = queryParams.toString();
-    return this.request<ApiResponse>(`/earnings/transactions${queryString ? `?${queryString}` : ''}`, { method: 'GET' });
+    const endpoint = `/bookings${queryString ? `?${queryString}` : ''}`;
+    
+    return this.request<any>(endpoint, {
+      method: 'GET',
+    });
   }
 
-  async requestWithdrawal(data: {
+  // Review Methods
+  async submitReview(reviewData: {
+    bookingId: string;
+    rating: number;
+    comment?: string | null;
+  }): Promise<ApiResponse<any>> {
+    return this.request<any>('/reviews', {
+      method: 'POST',
+      body: JSON.stringify(reviewData),
+    });
+  }
+
+  // Earnings/Withdrawal Methods
+  async getEarningsStats(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching earnings stats...');
+    
+    try {
+      const response = await this.request<any>('/earnings/stats', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Earnings stats response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Earnings stats error:', {
+        message: error.message,
+        endpoint: '/earnings/stats',
+      });
+      throw error;
+    }
+  }
+
+  async getBanks(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching banks list...');
+    
+    try {
+      const response = await this.request<any>('/paystack/banks', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Banks response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        banksCount: Array.isArray(response.data) ? response.data.length : 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Banks error:', {
+        message: error.message,
+        endpoint: '/paystack/banks',
+      });
+      throw error;
+    }
+  }
+
+  async verifyAccount(accountNumber: string, bankCode: string): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Verifying account...', {
+      accountNumber: accountNumber ? `${accountNumber.substring(0, 3)}***` : 'N/A',
+      bankCode,
+    });
+    
+    try {
+      const response = await this.request<any>('/paystack/verify-account', {
+        method: 'POST',
+        body: JSON.stringify({ accountNumber, bankCode }),
+      });
+      
+      console.log('[API Service] ✅ Account verification response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        accountName: response.data?.account_name || 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Account verification error:', {
+        message: error.message,
+        endpoint: '/paystack/verify-account',
+      });
+      throw error;
+    }
+  }
+
+  async requestWithdrawal(withdrawalData: {
     amount: number;
     bankName: string;
     accountNumber: string;
     accountName: string;
-  }): Promise<ApiResponse> {
-    await this.loadToken();
-    return this.request<ApiResponse>('/wallet/withdraw', {
-      method: 'POST',
-      body: JSON.stringify({
-        amount: data.amount,
-        withdrawalMethod: 'bank_transfer',
-        bankDetails: {
-          bankName: data.bankName,
-          accountNumber: data.accountNumber,
-          accountName: data.accountName,
+  }): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Requesting withdrawal:', {
+      amount: withdrawalData.amount,
+      bankName: withdrawalData.bankName,
+      accountNumber: withdrawalData.accountNumber ? `${withdrawalData.accountNumber.substring(0, 3)}***` : 'N/A',
+      accountName: withdrawalData.accountName,
+    });
+    
+    try {
+      const response = await this.request<any>('/earnings/withdraw', {
+        method: 'POST',
+        body: JSON.stringify(withdrawalData),
+      });
+      
+      console.log('[API Service] ✅ Withdrawal response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        fullResponse: JSON.stringify(response, null, 2),
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Withdrawal error:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        endpoint: '/earnings/withdraw',
+        withdrawalData: {
+          ...withdrawalData,
+          accountNumber: withdrawalData.accountNumber ? `${withdrawalData.accountNumber.substring(0, 3)}***` : 'N/A',
         },
-      }),
-    });
+      });
+      throw error;
+    }
   }
 
-  async getBanks(): Promise<ApiResponse> {
-    await this.loadToken();
-    return this.request<ApiResponse>('/paystack/banks', { method: 'GET' });
+  // Provider Profile Methods
+  async getProviderProfile(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching provider profile...');
+    
+    try {
+      const response = await this.request<any>('/providers/profile', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Provider profile response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        businessName: response.data?.businessName || 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Provider profile error:', {
+        message: error.message,
+        endpoint: '/providers/profile',
+      });
+      throw error;
+    }
   }
 
-  async verifyAccount(accountNumber: string, bankCode: string): Promise<ApiResponse> {
-    await this.loadToken();
-    return this.request<ApiResponse>('/paystack/verify-account', {
-      method: 'POST',
-      body: JSON.stringify({
-        accountNumber,
-        bankCode,
-      }),
+  async updateProviderProfile(updateData: {
+    businessName?: string;
+    category?: string;
+    subcategories?: string[];
+    bio?: string;
+    locationCity?: string;
+    locationState?: string;
+    latitude?: string;
+    longitude?: string;
+    portfolio?: string[];
+  }): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Updating provider profile...', {
+      businessName: updateData.businessName,
+      category: updateData.category,
+      hasSubcategories: Array.isArray(updateData.subcategories) && updateData.subcategories.length > 0,
+      hasPortfolio: Array.isArray(updateData.portfolio) && updateData.portfolio.length > 0,
     });
+    
+    try {
+      const response = await this.request<any>('/providers/profile', {
+        method: 'PUT',
+        body: JSON.stringify(updateData),
+      });
+      
+      console.log('[API Service] ✅ Provider profile update response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Provider profile update error:', {
+        message: error.message,
+        endpoint: '/providers/profile',
+      });
+      throw error;
+    }
+  }
+
+  // Get popular subcategories for a category
+  async getPopularSubcategories(category: string, limit: number = 20): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching popular subcategories...', { category, limit });
+    
+    try {
+      const response = await this.request<any>(`/providers/subcategories/${category}?limit=${limit}`, {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Popular subcategories response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        subcategoriesCount: response.data?.subcategories?.length || 0,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Popular subcategories error:', {
+        message: error.message,
+        endpoint: `/providers/subcategories/${category}`,
+      });
+      throw error;
+    }
+  }
+
+  // Provider Settings Methods
+  async getProviderSettings(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching provider settings...');
+    
+    try {
+      // Fetch both notification preferences and provider profile for privacy settings
+      const [notificationPrefs, providerProfile] = await Promise.all([
+        this.request<any>('/notifications/preferences', {
+          method: 'GET',
+        }).catch(() => ({ success: false, data: null })),
+        this.request<any>('/providers/profile', {
+          method: 'GET',
+        }).catch(() => ({ success: false, data: null })),
+      ]);
+
+      // Combine settings
+      const settings: {
+        notifications: { email: boolean; sms: boolean; push: boolean } | null;
+        privacy: { showProfile: boolean; showContactInfo: boolean; showPortfolio: boolean } | null;
+      } = {
+        notifications: notificationPrefs.success && notificationPrefs.data ? {
+          email: notificationPrefs.data.emailEnabled ?? true,
+          sms: notificationPrefs.data.smsEnabled ?? false,
+          push: notificationPrefs.data.pushEnabled ?? true,
+        } : null,
+        privacy: null,
+      };
+
+      // Extract privacy settings from provider profile's User object or fetch from user profile
+      if (providerProfile.success && providerProfile.data?.User?.privacySettings) {
+        // Privacy settings are in the User object within provider profile
+        settings.privacy = providerProfile.data.User.privacySettings;
+        console.log('[API Service] ✅ Loaded privacy settings from provider profile User');
+      } else {
+        // Try fetching from user profile endpoint
+        try {
+          const userProfileResponse = await this.request<any>('/auth/profile', {
+            method: 'GET',
+          }).catch(() => ({ success: false, data: null }));
+          
+          if (userProfileResponse.success && userProfileResponse.data?.user?.privacySettings) {
+            settings.privacy = userProfileResponse.data.user.privacySettings;
+            console.log('[API Service] ✅ Loaded privacy settings from user profile');
+          } else {
+            // Fallback: Try loading from local storage
+            try {
+              const localPrivacySettings = await AsyncStorage.getItem('user_privacy_settings');
+              if (localPrivacySettings) {
+                settings.privacy = JSON.parse(localPrivacySettings);
+                console.log('[API Service] ✅ Loaded privacy settings from local storage');
+              } else {
+                // Use default privacy settings
+                settings.privacy = {
+                  showProfile: true,
+                  showContactInfo: true,
+                  showPortfolio: true,
+                };
+              }
+            } catch (storageError) {
+              console.warn('[API Service] Could not load privacy settings from local storage:', storageError);
+              settings.privacy = {
+                showProfile: true,
+                showContactInfo: true,
+                showPortfolio: true,
+              };
+            }
+          }
+        } catch (error) {
+          console.warn('[API Service] Could not fetch user profile for privacy settings:', error);
+          // Fallback to defaults
+          settings.privacy = {
+            showProfile: true,
+            showContactInfo: true,
+            showPortfolio: true,
+          };
+        }
+      }
+
+      console.log('[API Service] ✅ Provider settings response:', {
+        hasNotifications: !!settings.notifications,
+        hasPrivacy: !!settings.privacy,
+      });
+
+      return {
+        success: true,
+        message: 'Provider settings retrieved successfully',
+        data: settings,
+      };
+    } catch (error: any) {
+      console.error('[API Service] ❌ Provider settings error:', {
+        message: error.message,
+        endpoint: '/providers/settings',
+      });
+      throw error;
+    }
+  }
+
+  async updateProviderNotificationSettings(settings: {
+    email: boolean;
+    sms: boolean;
+    push: boolean;
+  }): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Updating provider notification settings...', settings);
+    
+    try {
+      const response = await this.request<any>('/notifications/preferences', {
+        method: 'PUT',
+        body: JSON.stringify({
+          emailEnabled: settings.email,
+          smsEnabled: settings.sms,
+          pushEnabled: settings.push,
+        }),
+      });
+      
+      console.log('[API Service] ✅ Notification settings update response:', {
+        success: response.success,
+        message: response.message,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Notification settings update error:', {
+        message: error.message,
+        endpoint: '/notifications/preferences',
+      });
+      throw error;
+    }
+  }
+
+  async updateProviderPrivacySettings(settings: {
+    showProfile: boolean;
+    showContactInfo: boolean;
+    showPortfolio: boolean;
+  }): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Updating privacy settings (user-level)...', settings);
+    
+    try {
+      // Update via user profile endpoint - works for both providers and customers
+      const response = await this.request<any>('/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          privacySettings: settings,
+        }),
+      });
+      
+      console.log('[API Service] ✅ Privacy settings update response:', {
+        success: response.success,
+        message: response.message,
+      });
+      
+      // Store in AsyncStorage as backup
+      if (response.success) {
+        try {
+          await AsyncStorage.setItem('user_privacy_settings', JSON.stringify(settings));
+        } catch (storageError) {
+          console.warn('[API Service] Could not store privacy settings locally:', storageError);
+        }
+      }
+      
+      return {
+        success: true,
+        message: 'Privacy settings updated successfully',
+        data: settings,
+      };
+    } catch (error: any) {
+      console.warn('[API Service] ⚠️ Privacy settings API not available, storing locally:', error.message);
+      
+      // Fallback: Store locally in AsyncStorage
+      try {
+        await AsyncStorage.setItem('user_privacy_settings', JSON.stringify(settings));
+        
+        return {
+          success: true,
+          message: 'Privacy settings saved locally',
+          data: settings,
+        };
+      } catch (storageError: any) {
+        console.error('[API Service] ❌ Could not store privacy settings:', storageError);
+        throw new Error('Failed to save privacy settings');
+      }
+    }
+  }
+
+  // Provider Subscription Methods
+  async getProviderSubscription(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching provider subscription...');
+    
+    try {
+      const response = await this.request<any>('/subscriptions/my-subscription', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Provider subscription response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        status: response.data?.status || 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Provider subscription error:', {
+        message: error.message,
+        endpoint: '/subscriptions/my-subscription',
+      });
+      throw error;
+    }
+  }
+
+  async getProviderSubscriptionHistory(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching provider subscription history...');
+    
+    try {
+      const response = await this.request<any>('/subscriptions/history', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Provider subscription history response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        historyCount: Array.isArray(response.data) ? response.data.length : 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Provider subscription history error:', {
+        message: error.message,
+        endpoint: '/subscriptions/history',
+      });
+      throw error;
+    }
+  }
+
+  async getSubscriptionPlans(): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Fetching subscription plans...');
+    
+    try {
+      const response = await this.request<any>('/subscription-plans/plans', {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Subscription plans response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        plansCount: Array.isArray(response.data) ? response.data.length : 'N/A',
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Subscription plans error:', {
+        message: error.message,
+        endpoint: '/subscription-plans/plans',
+      });
+      throw error;
+    }
   }
 }
 

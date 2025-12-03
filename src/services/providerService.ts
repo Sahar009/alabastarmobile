@@ -274,4 +274,3 @@ class ProviderService {
 }
 
 export const providerService = new ProviderService();
-

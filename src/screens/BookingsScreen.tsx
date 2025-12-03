@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Modal,
-  Linking,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,11 +15,13 @@ import {
   Clock,
   MapPin,
   CheckCircle,
-  Filter,
-  Star,
+  XCircle,
+  AlertCircle,
+  ChevronRight,
+  RefreshCw,
   MessageCircle,
   Phone,
-  MessageSquare,
+  Star,
 } from 'lucide-react-native';
 import { apiService } from '../services/api';
 import RatingScreen from './RatingScreen';
@@ -32,9 +32,6 @@ interface Booking {
   scheduledAt: string;
   providerProfile?: {
     businessName: string;
-    category: string;
-    subcategories?: string[];
-    portfolio?: string[];
     User?: {
       id: string;
       fullName: string;
@@ -42,25 +39,72 @@ interface Booking {
       email: string;
     };
   };
+  locationCity?: string;
+  locationState?: string;
+  notes?: string;
+  createdAt: string;
   review?: {
     id: string;
     rating: number;
     comment?: string;
   };
-  locationCity?: string;
-  locationState?: string;
-  totalAmount: string;
-  currency: string;
-  notes?: string;
-  createdAt: string;
 }
 
 interface BookingsScreenProps {
   userData: any;
-  onNavigate?: (screen: string, params?: { recipientId?: string; bookingId?: string }) => void;
+  onNavigate?: (screen: string, params?: any) => void;
 }
 
+// Skeleton Loader Component
+const SkeletonLoader: React.FC = () => {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const opacity = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <View style={styles.skeletonCard}>
+      <View style={styles.skeletonHeader}>
+        <View style={styles.skeletonContent}>
+          <Animated.View style={[styles.skeletonLine, styles.skeletonLineTitle, { opacity }]} />
+          <Animated.View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { opacity }]} />
+        </View>
+        <Animated.View style={[styles.skeletonCircle, { opacity }]} />
+      </View>
+      <View style={styles.skeletonDetails}>
+        <Animated.View style={[styles.skeletonLine, styles.skeletonLineDetail1, { opacity }]} />
+        <Animated.View style={[styles.skeletonLine, styles.skeletonLineDetail2, { opacity }]} />
+        <Animated.View style={[styles.skeletonLine, styles.skeletonLineDetail3, { opacity }]} />
+      </View>
+      <View style={styles.skeletonFooter}>
+        <Animated.View style={[styles.skeletonButton, { opacity }]} />
+      </View>
+    </View>
+  );
+};
+
 const BookingsScreen: React.FC<BookingsScreenProps> = ({
+  userData: _userData,
   onNavigate,
 }) => {
   const [loading, setLoading] = useState(true);
@@ -70,10 +114,14 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showRatingScreen, setShowRatingScreen] = useState(false);
-  const [bookingToRate, setBookingToRate] = useState<Booking | null>(null);
-  const skeletonPulse = useRef(new Animated.Value(0)).current;
+  const [ratingBooking, setRatingBooking] = useState<Booking | null>(null);
 
-  const fetchBookings = useCallback(async () => {
+  useEffect(() => {
+    fetchBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  const fetchBookings = async () => {
     try {
       setLoading(true);
       
@@ -94,46 +142,42 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
           : response.data?.bookings || [];
         setBookings(bookingsList);
       } else {
-        Alert.alert('Error', 'Failed to fetch bookings');
+        console.error('Failed to fetch bookings:', response.message);
+        // Don't show alert on every error, just log it
       }
     } catch (error: any) {
       console.error('Fetch bookings error:', error);
-      Alert.alert('Error', error.message || 'Failed to fetch bookings');
+      // Only show alert if it's a critical error, not network issues
+      if (error.message && !error.message.includes('Network')) {
+        // Silent fail for network errors, user can retry with pull-to-refresh
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
-
-  useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(skeletonPulse, {
-          toValue: 1,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-        Animated.timing(skeletonPulse, {
-          toValue: 0,
-          duration: 900,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [skeletonPulse]);
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchBookings();
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -142,419 +186,170 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
         return '#10b981';
       case 'cancelled':
         return '#ef4444';
+      case 'confirmed':
+        return '#3b82f6';
       case 'requested':
-      case 'accepted':
         return '#f59e0b';
-      case 'in_progress':
-        return '#2563EB';
       default:
-        return '#64748b';
+        return '#6b7280';
     }
   };
 
-  const getStatusLabel = (status: string) => {
+  const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'in_progress':
-        return 'In Progress';
+      case 'completed':
+        return <CheckCircle size={16} color="#10b981" />;
+      case 'cancelled':
+        return <XCircle size={16} color="#ef4444" />;
+      case 'confirmed':
+        return <CheckCircle size={16} color="#3b82f6" />;
+      case 'requested':
+        return <AlertCircle size={16} color="#f59e0b" />;
       default:
-        return status.charAt(0).toUpperCase() + status.slice(1);
+        return <AlertCircle size={16} color="#6b7280" />;
     }
   };
 
-  const handleViewDetails = (booking: Booking) => {
+  const handleBookingPress = (booking: Booking) => {
     setSelectedBooking(booking);
     setShowDetailsModal(true);
   };
 
-  const handleRateProvider = (booking: Booking) => {
-    setBookingToRate(booking);
-    setShowRatingScreen(true);
-  };
-
-  const handleRatingSuccess = () => {
-    fetchBookings();
-  };
-
-  const handleUpdateStatus = (booking: Booking) => {
-    const nextActions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [
-      { text: 'Close', style: 'cancel' },
-    ];
-
-    const status = booking.status.toLowerCase();
-
-    if (status === 'requested') {
-      nextActions.push({
-        text: 'Mark as In Progress',
-        onPress: () => updateBookingStatus(booking.id, 'in_progress'),
-        style: 'default',
-      });
-      nextActions.push({
-        text: 'Mark as Completed',
-        onPress: () => updateBookingStatus(booking.id, 'completed'),
-        style: 'default',
-      });
-      nextActions.push({
-        text: 'Cancel Booking',
-        style: 'destructive',
-        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
-      });
-    } else if (status === 'accepted') {
-      nextActions.push({
-        text: 'Mark as In Progress',
-        onPress: () => updateBookingStatus(booking.id, 'in_progress'),
-      });
-      nextActions.push({
-        text: 'Mark as Completed',
-        onPress: () => updateBookingStatus(booking.id, 'completed'),
-        style: 'default',
-      });
-      nextActions.push({
-        text: 'Cancel Booking',
-        style: 'destructive',
-        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
-      });
-    } else if (status === 'in_progress') {
-      nextActions.push({
-        text: 'Mark as Completed',
-        onPress: () => updateBookingStatus(booking.id, 'completed'),
-        style: 'default',
-      });
-      nextActions.push({
-        text: 'Cancel Booking',
-        style: 'destructive',
-        onPress: () => updateBookingStatus(booking.id, 'cancelled'),
-      });
-    } else {
-      Alert.alert('Info', 'This booking can no longer be updated.');
-      return;
-    }
-
-    Alert.alert('Update Booking Status', 'Select new status:', nextActions);
-  };
-
-  const updateBookingStatus = async (bookingId: string, newStatus: string) => {
-    try {
-      const response = await apiService.updateBookingStatus(bookingId, newStatus);
-      
-      if (response.success) {
-        Alert.alert('Success', 'Booking status updated successfully');
-        fetchBookings();
-      } else {
-        Alert.alert('Error', 'Failed to update booking status');
-      }
-    } catch (error: any) {
-      console.error('Update status error:', error);
-      Alert.alert('Error', error.message || 'Failed to update booking status');
-    }
-  };
-
-  const handleCallProvider = (phone: string) => {
-    if (!phone) {
-      Alert.alert('Error', 'Phone number not available');
-      return;
-    }
-
-    // Clean phone number - remove all non-digit characters except +
-    let cleanPhone = phone.trim();
+  const renderBookingItem = (booking: Booking) => {
+    const providerName = booking.providerProfile?.businessName || 'Unknown Provider';
+    const providerUser = booking.providerProfile?.User;
     
-    // Remove spaces and other characters
-    cleanPhone = cleanPhone.replace(/[\s\-()]/g, '');
-    
-    // If it starts with 0, replace with +234 (Nigeria)
-    if (cleanPhone.startsWith('0')) {
-      cleanPhone = '+234' + cleanPhone.substring(1);
-    } else if (!cleanPhone.startsWith('+')) {
-      // If no + and doesn't start with country code, assume it's Nigeria
-      if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-        cleanPhone = '+234' + cleanPhone.replace(/^234/, '');
-      } else {
-        cleanPhone = '+' + cleanPhone;
-      }
-    }
-    
-    // Remove any remaining non-digit characters except +
-    cleanPhone = cleanPhone.replace(/[^\d+]/g, '');
-    
-    const telUrl = `tel:${cleanPhone}`;
-    
-    Linking.canOpenURL(telUrl)
-      .then((supported) => {
-        if (supported) {
-          return Linking.openURL(telUrl);
-        } else {
-          Alert.alert('Error', 'Phone calls are not supported on this device');
-        }
-      })
-      .catch((err) => {
-        console.error('Error opening phone dialer:', err);
-        Alert.alert('Error', 'Unable to make phone call. Please check your device settings.');
-      });
+    return (
+      <TouchableOpacity
+        key={booking.id}
+        style={styles.bookingCard}
+        onPress={() => handleBookingPress(booking)}
+      >
+        <View style={styles.bookingHeader}>
+          <View style={styles.bookingInfo}>
+            <Text style={styles.providerName}>{providerName}</Text>
+            <View style={styles.statusRow}>
+              {getStatusIcon(booking.status)}
+              <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>
+                {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={20} color="#9ca3af" />
+        </View>
+
+        <View style={styles.bookingDetails}>
+          <View style={styles.detailRow}>
+            <Calendar size={16} color="#6b7280" />
+            <Text style={styles.detailText}>{formatDate(booking.scheduledAt)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Clock size={16} color="#6b7280" />
+            <Text style={styles.detailText}>{formatTime(booking.scheduledAt)}</Text>
+          </View>
+          {(booking.locationCity || booking.locationState) && (
+            <View style={styles.detailRow}>
+              <MapPin size={16} color="#6b7280" />
+              <Text style={styles.detailText}>
+                {[booking.locationCity, booking.locationState].filter(Boolean).join(', ')}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {onNavigate && providerUser && (
+          <View style={styles.bookingFooter}>
+            <TouchableOpacity
+              style={styles.messageButton}
+              onPress={() => {
+                onNavigate('messages', {
+                  recipientId: providerUser.id,
+                  bookingId: booking.id,
+                });
+              }}
+            >
+              <MessageCircle size={18} color="#ffffff" />
+              <Text style={styles.messageButtonText}>Message</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
   };
-
-  const handleWhatsAppProvider = (phone: string) => {
-    // Clean phone number - remove all non-digit characters and ensure proper format
-    let cleanPhone = phone.replace(/[^\d]/g, ''); // Remove all non-digits
-    
-    // Create WhatsApp URL - try app first, then fallback to web
-    const whatsappUrl = `whatsapp://send?phone=${cleanPhone}`;
-    const webWhatsAppUrl = `https://wa.me/${cleanPhone}`;
-    
-    // Try to open WhatsApp app first
-    Linking.openURL(whatsappUrl)
-      .catch(() => {
-        // If WhatsApp app fails, try web version
-        Linking.openURL(webWhatsAppUrl)
-          .catch((err) => {
-            console.error('Error opening WhatsApp:', err);
-            Alert.alert('Error', 'Unable to open WhatsApp. Please make sure WhatsApp is installed.');
-          });
-      });
-  };
-
-  const handleSendMessage = (providerUserId: string, bookingId?: string) => {
-    if (!providerUserId) {
-      Alert.alert('Error', 'Provider information not available');
-      return;
-    }
-
-    // Navigate to messaging screen with provider ID
-    if (onNavigate) {
-      onNavigate('messages', { recipientId: providerUserId, bookingId });
-    } else {
-      Alert.alert('Error', 'Navigation not available');
-    }
-  };
-
-  // Calculate stats
-  const stats = {
-    total: bookings.length,
-    active: bookings.filter(b => ['requested', 'accepted', 'in_progress'].includes(b.status)).length,
-    completed: bookings.filter(b => b.status === 'completed').length,
-    cancelled: bookings.filter(b => b.status === 'cancelled').length,
-  };
-
-  const skeletonOpacity = skeletonPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 1],
-  });
-
-  const renderSkeletonCard = (key: number) => (
-    <View key={key} style={styles.skeletonCard}>
-      <Animated.View style={[styles.skeletonHeaderLine, { opacity: skeletonOpacity }]} />
-      <Animated.View style={[styles.skeletonSubLine, { opacity: skeletonOpacity }]} />
-      <View style={styles.skeletonRowGroup}>
-        <Animated.View style={[styles.skeletonChip, { opacity: skeletonOpacity }]} />
-        <Animated.View style={[styles.skeletonChipShort, { opacity: skeletonOpacity }]} />
-      </View>
-      <Animated.View style={[styles.skeletonButton, { opacity: skeletonOpacity }]} />
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.iconContainer}>
-            <Calendar size={24} color="#ffffff" />
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>My Bookings</Text>
-            <Text style={styles.headerSubtitle}>{stats.total} total bookings</Text>
-          </View>
-        </View>
+        <Text style={styles.title}>My Bookings</Text>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+          <RefreshCw size={20} color="#ec4899" />
+        </TouchableOpacity>
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.active}</Text>
-            <Text style={styles.statLabel}>Active</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{stats.cancelled}</Text>
-            <Text style={styles.statLabel}>Cancelled</Text>
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* Filters */}
-      <View style={styles.filtersContainer}>
-        <View style={styles.filterRow}>
-          <Filter size={16} color="#64748b" />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterButtons}>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-              onPress={() => setFilter('all')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-                All
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'requested' && styles.filterButtonActive]}
-              onPress={() => setFilter('requested')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'requested' && styles.filterTextActive]}>
-                Requested
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'accepted' && styles.filterButtonActive]}
-              onPress={() => setFilter('accepted')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'accepted' && styles.filterTextActive]}>
-                Accepted
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'in_progress' && styles.filterButtonActive]}
-              onPress={() => setFilter('in_progress')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'in_progress' && styles.filterTextActive]}>
-                In Progress
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'completed' && styles.filterButtonActive]}
-              onPress={() => setFilter('completed')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'completed' && styles.filterTextActive]}>
-                Completed
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, filter === 'cancelled' && styles.filterButtonActive]}
-              onPress={() => setFilter('cancelled')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterText, filter === 'cancelled' && styles.filterTextActive]}>
-                Cancelled
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </View>
-
-      {/* Bookings List */}
+      {/* Filter Tabs */}
       <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#ec4899"
-          />
-        }
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterContainer}
+        contentContainerStyle={styles.filterContent}
       >
-        {loading && bookings.length === 0 ? (
-          <View style={styles.skeletonContainer}>
-            {Array.from({ length: 3 }).map((_, index) => renderSkeletonCard(index))}
-          </View>
-        ) : bookings.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Calendar size={64} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>No bookings</Text>
-            <Text style={styles.emptySubtitle}>
-              {filter === 'all' ? 'You have no bookings yet' : `No ${filter} bookings`}
-            </Text>
-          </View>
-        ) : (
-          bookings.map((booking) => (
-            <TouchableOpacity
-              key={booking.id}
-              style={styles.bookingCard}
-              onPress={() => handleViewDetails(booking)}
-              activeOpacity={0.7}
+        {['all', 'requested', 'confirmed', 'completed', 'cancelled'].map((status) => (
+          <TouchableOpacity
+            key={status}
+            style={[
+              styles.filterButton,
+              filter === status && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilter(status)}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filter === status && styles.filterTextActive,
+              ]}
             >
-              <View style={styles.bookingHeader}>
-                <View style={styles.bookingInfo}>
-                  <Text style={styles.providerName} numberOfLines={1}>
-                    {booking.providerProfile?.businessName || 'Unknown Provider'}
-                  </Text>
-                  <Text style={styles.bookingDate}>
-                    {new Date(booking.scheduledAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </Text>
-                </View>
-                <View style={styles.statusBadge}>
-                  <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status) }]} />
-                  <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>
-                    {getStatusLabel(booking.status)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.bookingDetails}>
-                <View style={styles.detailRow}>
-                  <Clock size={14} color="#64748b" />
-                  <Text style={styles.detailText}>
-                    {new Date(booking.scheduledAt).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                  </Text>
-                </View>
-                {booking.locationCity && (
-                  <View style={styles.detailRow}>
-                    <MapPin size={14} color="#64748b" />
-                    <Text style={styles.detailText}>{booking.locationCity}</Text>
-                  </View>
-                )}
-              </View>
-
-              {booking.status === 'completed' && (
-                <>
-                  {booking.review ? (
-                    <View style={styles.ratedBadge}>
-                      <CheckCircle size={14} color="#10b981" />
-                      <Text style={styles.ratedText}>Rated</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.rateButton}
-                      onPress={() => handleRateProvider(booking)}
-                      activeOpacity={0.7}
-                    >
-                      <Star size={14} color="#f59e0b" fill="#f59e0b" />
-                      <Text style={styles.rateText}>Rate Provider</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-
-              {['requested', 'accepted', 'in_progress'].includes(booking.status) && (
-                <TouchableOpacity
-                  style={styles.updateStatusButton}
-                  onPress={() => handleUpdateStatus(booking)}
-                  activeOpacity={0.7}
-                >
-                  <Clock size={14} color="#ffffff" />
-                  <Text style={styles.updateStatusText}>Update Status</Text>
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
-          ))
-        )}
-
-        <View style={styles.footerSpacer} />
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
-      {/* Details Modal */}
+      {/* Bookings List */}
+      {loading && bookings.length === 0 ? (
+        <ScrollView
+          style={styles.listContainer}
+          contentContainerStyle={styles.listContent}
+        >
+          {[1, 2, 3, 4].map((item) => (
+            <SkeletonLoader key={item} />
+          ))}
+        </ScrollView>
+      ) : bookings.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No bookings found</Text>
+          <Text style={styles.emptySubtext}>
+            {filter === 'all'
+              ? "You don't have any bookings yet"
+              : `No ${filter} bookings found`}
+          </Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.listContainer}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#ec4899']}
+            />
+          }
+        >
+          {bookings.map(renderBookingItem)}
+        </ScrollView>
+      )}
+
+      {/* Booking Details Modal */}
       <Modal
         visible={showDetailsModal}
         animationType="slide"
@@ -571,65 +366,121 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
                     onPress={() => setShowDetailsModal(false)}
                     style={styles.closeButton}
                   >
-                    <Text style={styles.closeButtonText}>✕</Text>
+                    <XCircle size={24} color="#6b7280" />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.modalBody}>
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Provider</Text>
-                    <Text style={styles.modalSectionText}>
+                    <Text style={styles.modalLabel}>Provider</Text>
+                    <Text style={styles.modalValue}>
                       {selectedBooking.providerProfile?.businessName || 'Unknown'}
                     </Text>
                   </View>
 
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Date & Time</Text>
-                    <Text style={styles.modalSectionText}>
-                      {new Date(selectedBooking.scheduledAt).toLocaleString()}
-                    </Text>
+                    <Text style={styles.modalLabel}>Status</Text>
+                    <View style={styles.statusRow}>
+                      {getStatusIcon(selectedBooking.status)}
+                      <Text
+                        style={[
+                          styles.modalValue,
+                          { color: getStatusColor(selectedBooking.status) },
+                        ]}
+                      >
+                        {selectedBooking.status.charAt(0).toUpperCase() +
+                          selectedBooking.status.slice(1)}
+                      </Text>
+                    </View>
                   </View>
 
                   <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Location</Text>
-                    <Text style={styles.modalSectionText}>
-                      {selectedBooking.locationCity && selectedBooking.locationState
-                        ? `${selectedBooking.locationCity}, ${selectedBooking.locationState}`
-                        : 'Not specified'}
+                    <Text style={styles.modalLabel}>Date & Time</Text>
+                    <Text style={styles.modalValue}>
+                      {formatDate(selectedBooking.scheduledAt)} at{' '}
+                      {formatTime(selectedBooking.scheduledAt)}
                     </Text>
                   </View>
 
-                  {selectedBooking.providerProfile?.User?.phone && (
-                    <View style={styles.modalActions}>
-                      <TouchableOpacity
-                        style={styles.callButton}
-                        onPress={() => handleCallProvider(selectedBooking.providerProfile!.User!.phone)}
-                        activeOpacity={0.7}
-                      >
-                        <Phone size={18} color="#ffffff" />
-                        <Text style={styles.contactButtonText}>Call</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.whatsappButton}
-                        onPress={() => handleWhatsAppProvider(selectedBooking.providerProfile!.User!.phone)}
-                        activeOpacity={0.7}
-                      >
-                        <MessageSquare size={18} color="#ffffff" />
-                        <Text style={styles.contactButtonText}>WhatsApp</Text>
-                      </TouchableOpacity>
+                  {(selectedBooking.locationCity || selectedBooking.locationState) && (
+                    <View style={styles.modalSection}>
+                      <Text style={styles.modalLabel}>Location</Text>
+                      <Text style={styles.modalValue}>
+                        {[selectedBooking.locationCity, selectedBooking.locationState]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </Text>
                     </View>
                   )}
-                  
-                  {selectedBooking.providerProfile?.User?.id && (
+
+                  {selectedBooking.notes && (
+                    <View style={styles.modalSection}>
+                      <Text style={styles.modalLabel}>Notes</Text>
+                      <Text style={styles.modalValue}>{selectedBooking.notes}</Text>
+                    </View>
+                  )}
+
+                  {/* Rate Service Button for Completed Bookings */}
+                  {selectedBooking.status === 'completed' && (
+                    <View style={styles.modalSection}>
+                      {selectedBooking.review ? (
+                        <View style={styles.reviewedButton}>
+                          <CheckCircle size={20} color="#10b981" />
+                          <Text style={styles.reviewedText}>Reviewed</Text>
+                          {selectedBooking.review.rating > 0 && (
+                            <View style={styles.ratingDisplay}>
+                              <Star size={16} color="#fbbf24" fill="#fbbf24" />
+                              <Text style={styles.ratingText}>{selectedBooking.review.rating}</Text>
+                            </View>
+                          )}
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.rateButton}
+                          onPress={() => {
+                            setShowDetailsModal(false);
+                            setRatingBooking(selectedBooking);
+                            setShowRatingScreen(true);
+                          }}
+                        >
+                          <Star size={20} color="#ffffff" fill="#ffffff" />
+                          <Text style={styles.rateButtonText}>Rate Service</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {selectedBooking.providerProfile?.User && (
                     <View style={styles.modalActions}>
                       <TouchableOpacity
-                        style={styles.messageButton}
-                        onPress={() => handleSendMessage(selectedBooking.providerProfile!.User!.id, selectedBooking.id)}
-                        activeOpacity={0.7}
+                        style={styles.actionButton}
+                        onPress={() => {
+                          setShowDetailsModal(false);
+                          if (onNavigate) {
+                            onNavigate('messages', {
+                              recipientId: selectedBooking.providerProfile?.User?.id,
+                              bookingId: selectedBooking.id,
+                            });
+                          }
+                        }}
                       >
-                        <MessageCircle size={18} color="#ffffff" />
-                        <Text style={styles.contactButtonText}>Send Message</Text>
+                        <MessageCircle size={20} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Message</Text>
                       </TouchableOpacity>
+
+                      {selectedBooking.providerProfile?.User?.phone && (
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.actionButtonSecondary]}
+                          onPress={() => {
+                            // Handle phone call
+                          }}
+                        >
+                          <Phone size={20} color="#ec4899" />
+                          <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>
+                            Call
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                 </ScrollView>
@@ -639,18 +490,29 @@ const BookingsScreen: React.FC<BookingsScreenProps> = ({
         </View>
       </Modal>
 
-      {/* Rating Screen */}
-      {bookingToRate && (
-        <RatingScreen
-          isVisible={showRatingScreen}
-          booking={bookingToRate}
-          onClose={() => {
-            setShowRatingScreen(false);
-            setBookingToRate(null);
-          }}
-          onSuccess={handleRatingSuccess}
-        />
-      )}
+      {/* Rating Screen Modal */}
+      <Modal
+        visible={showRatingScreen}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowRatingScreen(false);
+          setRatingBooking(null);
+        }}
+      >
+        {ratingBooking && (
+          <RatingScreen
+            booking={ratingBooking}
+            onClose={() => {
+              setShowRatingScreen(false);
+              setRatingBooking(null);
+            }}
+            onSuccess={() => {
+              // Refresh bookings after successful rating
+              fetchBookings();
+            }}
+          />
+        )}
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -661,395 +523,391 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   header: {
-    backgroundColor: '#ec4899',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-  headerLeft: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
-  },
-  iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-  },
-  statsContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
     backgroundColor: '#ffffff',
-    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  statCard: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    marginHorizontal: 8,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#0f172a',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    marginTop: 4,
-  },
-  filtersContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  filterButtons: {
-    flex: 1,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f1f5f9',
-    marginRight: 8,
-  },
-  filterButtonActive: {
-    backgroundColor: '#ec4899',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748b',
-  },
-  filterTextActive: {
-    color: '#ffffff',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  skeletonContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  skeletonCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginBottom: 16,
-  },
-  skeletonHeaderLine: {
-    height: 18,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  skeletonSubLine: {
-    height: 14,
-    backgroundColor: '#e2e8f0',
-    borderRadius: 7,
-    width: '60%',
-  },
-  skeletonRowGroup: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 18,
-    marginBottom: 16,
-  },
-  skeletonChip: {
-    flex: 1,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#e2e8f0',
-  },
-  skeletonChipShort: {
-    width: 80,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#e2e8f0',
-  },
-  skeletonButton: {
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: '#e2e8f0',
-  },
-  emptyContainer: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginTop: 16,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginTop: 8,
-    textAlign: 'center',
-    paddingHorizontal: 40,
-  },
-  footerSpacer: {
-    height: 100,
-  },
-  bookingCard: {
-    backgroundColor: '#ffffff',
-    marginHorizontal: 20,
-    marginTop: 12,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderBottomColor: '#f1f5f9',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  refreshButton: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+  },
+  filterContainer: {
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    maxHeight: 64,
+  },
+  filterContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: '#f8fafc',
+    marginRight: 8,
+    minHeight: 40,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterButtonActive: {
+    backgroundColor: '#ec4899',
+    borderColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  filterText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    letterSpacing: 0.2,
+  },
+  filterTextActive: {
+    color: '#ffffff',
+  },
+  listContainer: {
+    flex: 1,
+  },
+  listContent: {
+    padding: 20,
+    gap: 16,
+  },
+  bookingCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
   },
   bookingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   bookingInfo: {
     flex: 1,
   },
   providerName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 4,
+    marginBottom: 8,
+    letterSpacing: -0.3,
   },
-  bookingDate: {
-    fontSize: 14,
-    color: '#64748b',
-  },
-  statusBadge: {
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   bookingDetails: {
-    gap: 8,
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 16,
+    paddingLeft: 2,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   detailText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#475569',
+    fontWeight: '500',
   },
-  amountText: {
+  bookingFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ec4899',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  messageButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  emptyText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 12,
+    letterSpacing: -0.5,
+  },
+  emptySubtext: {
     fontSize: 16,
-    fontWeight: 'bold',
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  skeletonCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  skeletonContent: {
+    flex: 1,
+  },
+  skeletonLine: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  skeletonLineTitle: {
+    width: '60%',
+    height: 20,
+  },
+  skeletonLineSubtitle: {
+    width: '40%',
+    height: 16,
+    marginBottom: 0,
+  },
+  skeletonLineDetail1: {
+    width: '70%',
+    height: 16,
+  },
+  skeletonLineDetail2: {
+    width: '55%',
+    height: 16,
+  },
+  skeletonLineDetail3: {
+    width: '65%',
+    height: 16,
+    marginBottom: 0,
+  },
+  skeletonCircle: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+  },
+  skeletonDetails: {
+    marginBottom: 16,
+  },
+  skeletonFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  skeletonButton: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    alignSelf: 'flex-end',
+    width: 100,
+    height: 36,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0f172a',
+    letterSpacing: -0.5,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+  },
+  modalBody: {
+    padding: 24,
+  },
+  modalSection: {
+    marginBottom: 24,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748b',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  modalValue: {
+    fontSize: 17,
+    color: '#0f172a',
+    fontWeight: '500',
+    lineHeight: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#ec4899',
+    paddingVertical: 14,
+    borderRadius: 14,
+    shadowColor: '#ec4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  actionButtonSecondary: {
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#ec4899',
+    shadowColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+  },
+  actionButtonTextSecondary: {
     color: '#ec4899',
   },
   rateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#fef3c7',
-    borderWidth: 1,
-    borderColor: '#fde68a',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: '#f59e0b',
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  rateText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#d97706',
-  },
-  cancelButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#fee2e2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  cancelText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#dc2626',
-  },
-  updateStatusButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#3b82f6',
-  },
-  updateStatusText: {
-    fontSize: 14,
+  rateButtonText: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+    letterSpacing: 0.2,
   },
-  ratedBadge: {
+  reviewedButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#d1fae5',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: '#dcfce7',
     borderWidth: 1,
     borderColor: '#86efac',
   },
-  ratedText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#0f172a',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 18,
-    color: '#64748b',
-  },
-  modalBody: {
-    padding: 20,
-  },
-  modalSection: {
-    marginBottom: 20,
-  },
-  modalSectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748b',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  modalSectionText: {
-    fontSize: 16,
-    color: '#0f172a',
-  },
-  modalAmountText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ec4899',
-  },
-  modalActions: {
-    marginTop: 20,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  callButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#ec4899',
-  },
-  whatsappButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#25D366',
-  },
-  messageButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#3b82f6',
-  },
-  contactButtonText: {
+  reviewedText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#10b981',
+    letterSpacing: 0.2,
+  },
+  ratingDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 4,
+  },
+  ratingText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#10b981',
   },
 });
 
