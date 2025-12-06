@@ -836,6 +836,104 @@ class ApiService {
       throw error;
     }
   }
+
+  async initializeProviderSubscription(planId: string): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Initializing provider subscription payment...', { planId });
+    
+    try {
+      const response = await this.request<any>('/subscriptions/initialize-payment', {
+        method: 'POST',
+        body: JSON.stringify({ planId, platform: 'mobile' }), // Specify mobile platform
+      });
+      
+      console.log('[API Service] ✅ Subscription payment initialization response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+        hasAuthorizationUrl: !!response.data?.authorization_url,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Subscription payment initialization error:', {
+        message: error.message,
+        endpoint: '/subscriptions/initialize-payment',
+      });
+      throw error;
+    }
+  }
+
+  async cancelProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Cancelling provider subscription...', { subscriptionId });
+    
+    try {
+      const response = await this.request<any>('/subscriptions/cancel', {
+        method: 'POST',
+        body: JSON.stringify({ subscriptionId }),
+      });
+      
+      console.log('[API Service] ✅ Subscription cancellation response:', {
+        success: response.success,
+        message: response.message,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Subscription cancellation error:', {
+        message: error.message,
+        endpoint: '/subscriptions/cancel',
+      });
+      throw error;
+    }
+  }
+
+  async reactivateProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Reactivating provider subscription...', { subscriptionId });
+    
+    try {
+      const response = await this.request<any>('/subscriptions/reactivate', {
+        method: 'POST',
+        body: JSON.stringify({ subscriptionId }),
+      });
+      
+      console.log('[API Service] ✅ Subscription reactivation response:', {
+        success: response.success,
+        message: response.message,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Subscription reactivation error:', {
+        message: error.message,
+        endpoint: '/subscriptions/reactivate',
+      });
+      throw error;
+    }
+  }
+
+  async verifySubscriptionPayment(reference: string): Promise<ApiResponse<any>> {
+    console.log('[API Service] 🚀 Verifying subscription payment...', { reference });
+    
+    try {
+      const response = await this.request<any>(`/subscriptions/verify-payment/${reference}`, {
+        method: 'GET',
+      });
+      
+      console.log('[API Service] ✅ Payment verification response:', {
+        success: response.success,
+        message: response.message,
+        hasData: !!response.data,
+      });
+      
+      return response;
+    } catch (error: any) {
+      console.error('[API Service] ❌ Payment verification error:', {
+        message: error.message,
+        endpoint: `/subscriptions/verify-payment/${reference}`,
+      });
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance

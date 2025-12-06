@@ -407,8 +407,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
   // Fetch categories from API
   const fetchCategories = useCallback(async () => {
     try {
-      const base = "http://localhost:8000/api";
-      const response = await fetch(`${base}/providers/categories`);
+      const base = API_BASE_URL;
+      const response = await fetch(`${base}/categories/categories`);
       const data = await response.json();
       
       if (data.success && data.data?.categories) {
@@ -432,6 +432,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
             subcategories: cat.subcategories || []
           };
         });
+        
+        // Save categories to AsyncStorage for AllServicesScreen to use
+        // (without icon functions since they can't be serialized - will be restored by id lookup)
+        try {
+          const categoriesToCache = apiCategories.map(({ icon: _icon, iconImage: _iconImage, ...rest }: any) => rest);
+          await AsyncStorage.setItem('cached_categories', JSON.stringify(categoriesToCache));
+          console.log('[HomeScreen] ✅ Saved', apiCategories.length, 'categories to cache');
+        } catch (error) {
+          console.error('[HomeScreen] Error saving categories to cache:', error);
+        }
         
         // Store all categories for search suggestions
         setAllCategories(apiCategories.map((cat: any) => ({
@@ -978,11 +988,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <View>
-              <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'},</Text>
-              <Text style={styles.userName}>
-                {userData?.role === 'provider' 
-                  ? 'Provider' 
-                  : userData?.user?.fullName || 'User'}!
+              <Text style={styles.greeting}>
+                Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {(() => {
+                  const fullName = userData?.fullName || userData?.user?.fullName || (userData?.role === 'provider' ? 'Provider' : 'User');
+                  return fullName.length > 4 ? `${fullName.substring(0, 4)}...` : fullName;
+                })()}!
               </Text>
             </View>
             <View style={styles.headerRight}>
@@ -1008,7 +1018,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.subtitle}>Find trusted pros for any job</Text>
+          <Text style={styles.subtitle}>Find trusted businesses and professionals</Text>
         </View>
 
         {/* Search Bar */}
@@ -1065,7 +1075,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
           <Text style={styles.sectionTitle}>Popular Services</Text>
               <TouchableOpacity
                 style={styles.sectionActionButton}
-                onPress={() => onNavigate?.('providers')}
+                onPress={() => onNavigate?.('all-services')}
                 activeOpacity={0.7}
               >
                 <Text style={styles.sectionActionText}>See all</Text>
@@ -1307,10 +1317,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#94a3b8',
   },
   greeting: {
-    fontSize: 15,
-    color: '#64748b',
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 22,
+    color: '#0f172a',
+    fontWeight: '800',
+    letterSpacing: -0.3,
     marginBottom: 4,
   },
   userName: {

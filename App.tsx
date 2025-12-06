@@ -34,6 +34,7 @@ import MessagingScreen from './src/screens/MessagingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
+import AllServicesScreen from './src/screens/AllServicesScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 
 type AppScreen =
@@ -43,6 +44,7 @@ type AppScreen =
   | 'home'
   | 'location-selection'
   | 'providers'
+  | 'all-services'
   | 'profile'
   | 'notifications'
   | 'bookings'
@@ -460,6 +462,8 @@ function App() {
             onNavigate={(screen: string) => {
               if (screen === 'notifications') {
                 setCurrentScreen('notifications');
+              } else if (screen === 'all-services') {
+                setCurrentScreen('all-services');
               }
             }}
           />
@@ -483,6 +487,15 @@ function App() {
             selectedCategory={selectedCategory}
             selectedLocation={selectedLocation}
             searchQuery={searchQuery}
+          />
+        );
+      
+      case 'all-services':
+        return (
+          <AllServicesScreen
+            onCategorySelect={handleSelectCategory}
+            onBack={() => setCurrentScreen('home')}
+            selectedLocation={selectedLocation || 'Lagos'}
           />
         );
       

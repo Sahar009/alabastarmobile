@@ -72,7 +72,7 @@ export const providerOnboardingService = {
       },
       body: formData,
     });
-    return handleJsonResponse(response) as Promise<{ files: UploadResult[] }>;
+    return handleJsonResponse(response) as Promise<{ success: boolean; message?: string; files: UploadResult[] }>;
   },
 
   async uploadBrandImages(formData: FormData, token?: string) {
@@ -88,7 +88,7 @@ export const providerOnboardingService = {
       },
       body: formData,
     });
-    return handleJsonResponse(response) as Promise<{ files: UploadResult[] }>;
+    return handleJsonResponse(response) as Promise<{ success: boolean; message?: string; files: UploadResult[] }>;
   },
 
   async initializePayment(subscriptionPlanId: string, additionalData?: {
@@ -102,7 +102,7 @@ export const providerOnboardingService = {
       throw new Error('Authentication required');
     }
 
-    const payload: any = { subscriptionPlanId };
+    const payload: any = { subscriptionPlanId, platform: 'mobile' }; // Specify mobile platform
     
     // Add required fields if provided
     if (additionalData) {

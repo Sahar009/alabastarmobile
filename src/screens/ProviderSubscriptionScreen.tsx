@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
+  AppStateStatus,
   Linking,
   RefreshControl,
   ScrollView,
@@ -11,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
   ArrowRight,
@@ -124,6 +127,7 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
   const [plans, setPlans] = useState<SubscriptionPlan[]>(FALLBACK_PLANS);
   const [subscription, setSubscription] = useState<ProviderSubscription | null>(null);
   const [history, setHistory] = useState<PaymentHistoryItem[]>([]);
+  const [pendingPaymentReference, setPendingPaymentReference] = useState<string | null>(null);
 
   const formatCurrency = useCallback((amount?: number, currency = 'NGN') => {
     if (!amount || Number.isNaN(amount)) {
@@ -242,7 +246,60 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
 
   useEffect(() => {
     fetchSubscriptionData();
+    // Check for pending payment verification
+    checkPendingPayment();
   }, [fetchSubscriptionData]);
+
+  // Handle app state changes to verify payment when app comes to foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [pendingPaymentReference]);
+
+  const handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'active' && pendingPaymentReference) {
+      // App came to foreground, verify pending payment
+      verifyPayment(pendingPaymentReference);
+    }
+  };
+
+  const checkPendingPayment = async () => {
+    try {
+      const storedReference = await AsyncStorage.getItem('pending_payment_reference');
+      if (storedReference) {
+        setPendingPaymentReference(storedReference);
+        // Verify payment immediately
+        await verifyPayment(storedReference);
+      }
+    } catch (error) {
+      console.error('Error checking pending payment:', error);
+    }
+  };
+
+  const verifyPayment = async (reference: string) => {
+    try {
+      console.log('[ProviderSubscriptionScreen] Verifying payment:', reference);
+      const response = await apiService.verifySubscriptionPayment(reference);
+      
+      if (response.success) {
+        // Payment verified successfully
+        Alert.alert('Payment Successful', 'Your subscription has been activated successfully!');
+        // Clear pending payment reference
+        await AsyncStorage.removeItem('pending_payment_reference');
+        setPendingPaymentReference(null);
+        // Refresh subscription data
+        fetchSubscriptionData();
+      } else {
+        // Payment not yet verified or failed
+        console.log('[ProviderSubscriptionScreen] Payment verification:', response.message);
+      }
+    } catch (error: any) {
+      console.error('[ProviderSubscriptionScreen] Payment verification error:', error);
+      // Don't show error alert - payment might still be processing
+    }
+  };
 
   const activePlanId = useMemo(() => subscription?.planId, [subscription]);
 
@@ -283,8 +340,20 @@ const ProviderSubscriptionScreen: React.FC<ProviderSubscriptionScreenProps> = ({
                   response.data.checkoutUrl ||
                   response.data.checkout_url;
 
+                // Store payment reference for verification when user returns
+                const paymentReference = response.data.reference;
+                if (paymentReference) {
+                  await AsyncStorage.setItem('pending_payment_reference', paymentReference);
+                  setPendingPaymentReference(paymentReference);
+                }
+
                 if (paymentUrl && (await Linking.canOpenURL(paymentUrl))) {
                   await Linking.openURL(paymentUrl);
+                  Alert.alert(
+                    'Payment',
+                    'You will be redirected to complete payment. Return to the app after payment to verify your subscription.',
+                    [{ text: 'OK' }]
+                  );
                 } else {
                   Alert.alert('Payment', 'Subscription payment link generated. Please check your email to continue.');
                 }

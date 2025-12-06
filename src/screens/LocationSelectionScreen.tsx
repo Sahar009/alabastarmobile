@@ -49,17 +49,117 @@ const LocationSelectionScreen: React.FC<LocationSelectionScreenProps> = ({
   const [detectedLocation, setDetectedLocation] = useState<string | null>(null);
   const [locationData, setLocationData] = useState<LocationData | null>(null);
 
-  // Only Lagos locations for now
+  // All Lagos locations - Comprehensive list
   const lagosAreas = [
-    'Victoria Island', 'Ikoyi', 'Lekki', 'Ajah', 'Surulere', 'Ikeja',
-    'Mushin', 'Yaba', 'Lagos Island', 'Lagos Mainland', 'Gbagada',
-    'Maryland', 'Ilupeju', 'Oshodi', 'Ketu', 'Bariga', 'Magodo',
-    'Omole', 'Isolo', 'Festac', 'Ijegun', 'Isheri', 'Alimosho'
-  ];
+    // Island Areas
+    'Victoria Island', 'Ikoyi', 'Lekki Phase 1', 'Lekki Phase 2', 'Lekki Phase 3',
+    'Ajah', 'Lagos Island', 'Lagos Mainland', 'Banana Island', 'Chevron',
+    'Osapa London', 'Chisco', 'Osapa', 'Osapa Lekki', 'Abraham Adesanya',
+    'Jakande', 'Sangotedo', 'Awoyaya', 'Abijo', 'Lakowe', 'Elegushi',
+    'Marina', 'Onikan', 'Tarkwa Bay', 'CMS', 'Broad Street',
+    'Obalende', 'Ikeja City Mall', 'Ikeja GRA', 'Allen Avenue', 'Adeniyi Jones',
+    
+    // Mainland Central
+    'Ikeja', 'Oregun', 'Alausa', 'Maryland', 'Ilupeju', 'Palmgrove',
+    'Gbagada', 'Gbagada Phase 1', 'Gbagada Phase 2', 'Anthony', 'Mushin',
+    'Yaba', 'Surulere', 'Oshodi', 'Isolo', 'Bariga', 'Magodo',
+    'Magodo Phase 1', 'Magodo Phase 2', 'Omole', 'Ogba', 'Agege',
+    'Ifako-Ijaiye', 'Ketu', 'Alapere', 'Ijaiye', 'Abule Egba',
+    'Anthony Village', 'Ojodu', 'Berger', 'Papa Ajao', 'Ojuelegba',
+    'Lawanson', 'Idi-Araba', 'Ladipo', 'Oshodi-Isolo', 'Ejigbo',
+    'Ikotun', 'Ajao Estate', 'Ajao', 'Mafoluku', 'Okota',
+    'Ilasamaja', 'Shasha', 'Akowonjo', 'Egbeda', 'Ipaja',
+    'Shangisha', 'Ikosi', 'Ketu-Ojota', 'Oworonshoki', 'Kosofe',
+    
+    // Ikorodu and surrounding areas
+    'Ikorodu', 'Ikorodu West', 'Ikorodu Central', 'Ikorodu East',
+    'Agric', 'Agbowa', 'Aiyetoro', 'Bayeku', 'Ebute', 'Ejinrin',
+    'Epe', 'Igbogbo', 'Igbokoda', 'Ijebu-Ode Road', 'Imota',
+    'Ipakodo', 'Isiwu', 'Ita-Oluwo', 'Itoikin', 'Kosofe',
+    'Ladega', 'Lakowe', 'Majidun', 'Maya', 'Odogunyan',
+    'Ofada', 'Oke-Eletu', 'Oko-Agbon', 'Oreta', 'Owode',
+    'Owutu', 'Palmgroove', 'Sagamu Road', 'Tos Benson',
+    'Ibeshe', 'Odongunyan', 'Agura', 'Adamo', 'Ajegunle Ikorodu',
+    'Odogunyan', 'Parafa', 'Igbogbo-Baiyeku', 'Ijede', 'Isiwu',
+    
+    // Lagos East
+    'Ikotun', 'Idimu', 'Igando', 'Ikotun-Egbe', 'Isheri',
+    'Ijegun', 'Lakowe', 'Sangotedo', 'Awoyaya', 'Abijo',
+    'Ibeju-Lekki', 'Eti-Osa', 'Elegushi', 'Jakande',
+    'Abraham Adesanya', 'Ajah', 'Badore', 'Ikota', 'Victoria Garden City',
+    'Lekki', 'Osapa', 'Chevron Drive', 'Admiralty Way',
+    
+    // Lagos West
+    'Amuwo-Odofin', 'Festac Town', 'Satellite Town', 'Okokomaiko',
+    'Agboju', 'Trade Fair', 'Ijanikin', 'Badagry', 'Ojo',
+    'Alaba International', 'Alaba Rago', 'Maza-Maza', 'Iba',
+    'Agbara', 'Atan', 'Apa', 'Iworo', 'Ajido',
+    'Akodo', 'Akpakpa', 'Aradagun', 'Araromi', 'Asero',
+    'Badagry', 'Dosumu', 'Egan', 'Ekure', 'Ewu',
+    'Gberefu', 'Ginti', 'Ibiye', 'Ibode', 'Idale',
+    'Ijanikin', 'Ikoga', 'Ikoga-Zebbe', 'Ilado', 'Imeke',
+    'Kankon', 'Kemta', 'Kpankpa', 'Kwa Afolabi', 'Maforo',
+    'Mahinmi', 'Mowo', 'Oke-Agbede', 'Oko-Afo', 'Okokomaiko',
+    'Oluti', 'Oru', 'Ovomoyan', 'Owode', 'Popo-Oja',
+    'Posukoh', 'Seme', 'Sunren', 'Toga', 'Topo',
+    'Topolawa', 'Vespa', 'Whla', 'Yeketome', 'Yovoyan',
+    
+    // Lagos North
+    'Alimosho', 'Egbeda', 'Idimu', 'Ipaja', 'Ayobo', 'Command',
+    'Alagbado', 'Iju', 'Ijoko', 'Akute', 'Akowonjo', 'Egbe',
+    'Ijaiye', 'Abule Egba', 'Meiran', 'Abesan', 'Adeniyi Jones',
+    'Agege Motor Road', 'Agidingbi', 'Aguda', 'Ajegunle', 'Akute',
+    'Alagbado', 'Alasia', 'Baruwa', 'Ifako', 'Ijaiye-Ojokoro',
+    'Isheri', 'Ladipo', 'Moshalashi', 'New Oko Oba', 'Obawole',
+    'Old Oko Oba', 'Onipetesi', 'Oregun', 'Orile-Agege', 'Sanya',
+    'Tolu', 'Wesley', 'Abule Taylor', 'Alausa', 'Ikeja Airport',
+    
+    // Apapa and Port Areas
+    'Apapa', 'Apapa GRA', 'Ijora', 'Iganmu', 'Coker-Aguda',
+    'Itire', 'KiriKiri', 'Mile 2', 'Orile', 'Olodi-Apapa',
+    'Alaba', 'Alaba International', 'Alaba Rago',
+    
+    // Island Extensions
+    'Tarkwa Bay', 'CMS', 'Broad Street', 'Marina', 'Onikan',
+    'Lagos Island', 'Idumota', 'Oshodi', 'Obalende', 'Ebute Metta',
+    'Yaba', 'Surulere', 'Ijesha', 'Itire', 'Lawanson',
+    'Ojuelegba', 'Shitta', 'Stadium', 'Toyin', 'Aguda',
+    'Coker', 'Igbobi', 'Oshodi-Isolo', 'Ajao', 'Isolo',
+    'Mafoluku', 'Oke-Afa', 'Okota', 'Ikotun', 'Ejigbo',
+    'Shasha', 'Idimu', 'Ikotun-Egbe', 'Igando', 'Ijegun',
+    
+    // Other Major Areas
+    'Palmgroove', 'Somolu', 'Bariga', 'Akoka', 'Fadeyi',
+    'Ilupeju', 'Palmgrove', 'Ilupeju Bypass', 'Anthony', 'Ikeja',
+    'Oregun', 'Alausa', 'Adeniyi Jones', 'Obafemi Awolowo Way',
+    'Kudirat Abiola Way', 'Opebi', 'Allen', 'Ajao', 'Mafoluku',
+    'Ajao Estate', 'Airport Road', 'Ikeja Airport', 'Oshodi',
+    'Oshodi-Isolo', 'Isolo', 'Okota', 'Ejigbo', 'Ikotun',
+    'Ikotun-Egbe', 'Igando', 'Ijegun', 'Shasha', 'Akowonjo',
+    'Egbeda', 'Idimu', 'Ipaja', 'Ayobo', 'Command',
+    'Alagbado', 'Iju', 'Ijoko', 'Akute', 'Meiran',
+    'Abesan', 'Agbado', 'Ijaiye', 'Abule Egba', 'Bariga',
+    'Somolu', 'Kosofe', 'Ifako', 'Ijaiye-Ojokoro', 'Ojodu',
+    'Berger', 'Mile 12', 'Ketu', 'Alapere', 'Iju-Ishaga',
+    'Ogudu', 'Ojota', 'Magodo Phase 1', 'Magodo Phase 2',
+    'Shangisha', 'Ikosi', 'Ketu-Ojota', 'Oworonshoki', 'Kosofe',
+    'Anthony Village', 'Gbagada', 'Anthony', 'Mushin', 'Yaba',
+    'Surulere', 'Ijesha', 'Itire', 'Lawanson', 'Ojuelegba',
+    'Shitta', 'Stadium', 'Toyin', 'Aguda', 'Coker',
+    'Igbobi', 'Idi-Araba', 'Ladipo', 'Papa Ajao',
+    
+    // Additional Ikorodu areas
+    'Ebute', 'Ebute Ikorodu', 'Ibeshe', 'Igbogbo', 'Igbogbo-Baiyeku',
+    'Ijede', 'Isiwu', 'Majidun', 'Odogunyan', 'Oreta',
+    'Owutu', 'Parafa', 'Tos Benson', 'Bayeku', 'Adamo',
+    'Agura', 'Ajegunle Ikorodu', 'Ejinrin', 'Imota', 'Ipakodo',
+    'Ita-Oluwo', 'Ladega', 'Maya', 'Odo-Nla', 'Oke-Eletu',
+    'Oko-Agbon', 'Owode Ikorodu'
+  ].filter((value, index, self) => self.indexOf(value) === index).sort(); // Remove duplicates and sort alphabetically
 
   const filteredLocations = lagosAreas
     .filter(area => area.toLowerCase().includes(searchQuery.toLowerCase()))
-    .slice(0, 8);
+    .slice(0, 20); // Show up to 20 results
 
   // Debounced remote suggestions using OpenStreetMap Nominatim (no API key)
   useEffect(() => {

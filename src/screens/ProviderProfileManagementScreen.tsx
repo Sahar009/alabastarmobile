@@ -27,6 +27,7 @@ import {
   X,
   Image as ImageIcon,
   Trash2,
+  LogOut,
 } from 'lucide-react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { apiService, API_BASE_URL } from '../services/api';
@@ -36,6 +37,7 @@ interface ProviderProfileManagementScreenProps {
   userData: any;
   onBack?: () => void;
   onNavigate?: (screen: string) => void;
+  onLogout?: () => void;
 }
 
 interface ProviderProfile {
@@ -180,7 +182,7 @@ const ProfileSkeletonLoader: React.FC = () => {
   );
 };
 
-const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenProps> = ({ userData, onBack, onNavigate }) => {
+const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenProps> = ({ userData, onBack, onNavigate, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,6 +193,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
   const [availableSubcategories, setAvailableSubcategories] = useState<string[]>([]);
   const [loadingSubcategories, setLoadingSubcategories] = useState(false);
   const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [_selectedCategoryForSubcat, setSelectedCategoryForSubcat] = useState<string>('');
 
   const [profile, setProfile] = useState<ProviderProfile>({
@@ -396,9 +399,21 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
 
         try {
           setPortfolioLoading(true);
-          const upload = await providerOnboardingService.uploadFile(asset.uri, asset.fileName || `portfolio_${Date.now()}.jpg`, asset.type || 'image/jpeg');
-          if (upload.success && upload.data?.url) {
-            const url = upload.data.url;
+          
+          // Create FormData for the image
+          const formData = new FormData();
+          formData.append('brandImages', {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || `portfolio_${Date.now()}.jpg`,
+          } as any);
+          
+          // Upload using uploadBrandImages method
+          const upload = await providerOnboardingService.uploadBrandImages(formData);
+          
+          if (upload.success && upload.files && upload.files.length > 0) {
+            // Extract URL from the first uploaded file
+            const url = upload.files[0].url;
             const updatedPortfolio = [...profile.portfolio, url].slice(0, MAX_PORTFOLIO);
             const updated = { ...profile, portfolio: updatedPortfolio };
             setProfile(updated);
@@ -406,7 +421,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               setEditing(true);
             }
           } else {
-            Alert.alert('Upload Failed', upload.message || 'Unable to upload portfolio image.');
+            Alert.alert('Upload Failed', 'Unable to upload portfolio image.');
           }
         } catch (error: any) {
           console.error('Portfolio upload error', error);
@@ -475,11 +490,18 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     // Update category
     setProfile(prev => ({ ...prev, category: categoryValue }));
     
+    // Close category modal
+    setShowCategoryModal(false);
+    
     // Load and show subcategories
     setSelectedCategoryForSubcat(categoryValue);
     await loadSubcategories(categoryValue);
     setShowSubcategoryModal(true);
-  }, [loadSubcategories]);
+    
+    if (!editing) {
+      setEditing(true);
+    }
+  }, [loadSubcategories, editing]);
 
   const handleSubcategoryToggle = (subcategory: string) => {
     const normalized = subcategory.toLowerCase().trim();
@@ -522,6 +544,17 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
         <Shield size={14} color={color} />
         <Text style={[styles.verificationText, { color }]}>{label}</Text>
       </View>
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign Out', style: 'destructive', onPress: onLogout },
+      ]
     );
   };
 
@@ -654,17 +687,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
             disabled={!editing}
             onPress={() => {
               if (!editing) return;
-              Alert.alert(
-                'Select Category',
-                'Choose the primary category that best describes your business.',
-                [
-                  ...categories.map((category) => ({
-                    text: category.label,
-                    onPress: () => handleCategorySelect(category.value),
-                  })),
-                  { text: 'Cancel', style: 'cancel' as const },
-                ],
-              );
+              setShowCategoryModal(true);
             }}
           >
             <MapPin size={18} color="#ec4899" />
@@ -763,9 +786,96 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           </View>
         </View>
 
+        {/* Sign Out */}
+        {onLogout && (
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <LogOut size={20} color="#ef4444" />
+            <Text style={styles.logoutText}>Sign Out</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.bottomSpacer} />
         </ScrollView>
       )}
+
+      {/* Category Selection Modal */}
+      <Modal
+        visible={showCategoryModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCategoryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseButton}>
+                <X size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.modalSubtitle}>
+              Choose the primary category that best describes your business.
+            </Text>
+
+            {categoryLoading ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#ec4899" />
+                <Text style={styles.modalLoadingText}>Loading categories...</Text>
+              </View>
+            ) : categories.length > 0 ? (
+              <FlatList
+                data={categories}
+                keyExtractor={(item) => item.value}
+                renderItem={({ item }) => {
+                  const isSelected = profile.category === item.value;
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.subcategoryItem,
+                        isSelected && styles.subcategoryItemSelected,
+                      ]}
+                      onPress={() => handleCategorySelect(item.value)}
+                    >
+                      <Text
+                        style={[
+                          styles.subcategoryItemText,
+                          isSelected && styles.subcategoryItemTextSelected,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      {isSelected && <CheckCircle size={20} color="#ec4899" />}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={styles.modalListContent}
+                showsVerticalScrollIndicator={true}
+              />
+            ) : (
+              <View style={styles.modalEmptyContainer}>
+                <Text style={styles.modalEmptyText}>
+                  No categories available.
+                </Text>
+                <Text style={styles.modalEmptySubtext}>
+                  Please try again later.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.modalDoneButton}
+              onPress={() => setShowCategoryModal(false)}
+            >
+              <Text style={styles.modalDoneButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Subcategory Selection Modal */}
       <Modal
@@ -1234,6 +1344,25 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 60,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 18,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef4444',
   },
   // Modal Styles
   modalOverlay: {
