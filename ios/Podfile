@@ -5,14 +5,8 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-platform :ios, min_ios_version_supported
+platform :ios, '15.1'
 prepare_react_native_project!
-
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
 
 target 'AlabastarMobile' do
   config = use_native_modules!
@@ -23,6 +17,12 @@ target 'AlabastarMobile' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # Enable modular headers for Firebase/Google dependencies
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'GoogleDataTransport', :modular_headers => true
+  pod 'nanopb', :modular_headers => true
+  pod 'PromisesObjC', :modular_headers => true
+
   post_install do |installer|
     react_native_post_install(
       installer,
@@ -30,5 +30,19 @@ target 'AlabastarMobile' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    
+    # Fix deployment target warnings
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+        
+        # Enable modular headers for Firebase and Google pods
+        if target.name.include?('Firebase') || target.name.include?('Google') || target.name.include?('Promises') || target.name.include?('nanopb')
+          config.build_settings['DEFINES_MODULE'] = 'YES'
+          config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+        end
+      end
+    end
   end
 end

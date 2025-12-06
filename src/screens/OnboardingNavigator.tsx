@@ -340,8 +340,10 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   imageContainer: {
-    width: width * 0.7,
-    height: height * 0.4,
+    width: width * 0.6,
+    height: width * 0.3, // Use width-based height for better aspect ratio
+    maxWidth: 280,
+    maxHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',

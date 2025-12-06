@@ -77,15 +77,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '80%',
-    maxWidth: 300,
+    width: '70%',
+    maxWidth: 280,
     aspectRatio: 4096 / 1560, // Maintain logo aspect ratio
   },
   logo: {
     width: '100%',
     height: '100%',
-    maxWidth: 250,
-    maxHeight: 95,
+    maxWidth: 280,
+    maxHeight: 107,
   },
   loadingContainer: {
     marginTop: 20,

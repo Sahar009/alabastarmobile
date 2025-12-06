@@ -7,6 +7,9 @@
     <color name="background">#FFFFFF</color>
     <color name="surface">#F8F9FA</color>
     
+    <!-- Launcher icon background -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    
     <!-- Text colors -->
     <color name="text_primary">#1F2937</color>
     <color name="text_secondary">#6B7280</color>

@@ -73,8 +73,19 @@ function App() {
     // Add delay to ensure React Native native modules are fully initialized
     const initialize = async () => {
       try {
-        // Wait for native modules to be ready
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait longer for Firebase and native modules to be ready
+        await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
+        
+        // Load saved userType first
+        try {
+          const savedUserType = await AsyncStorage.getItem('selectedUserType');
+          if (savedUserType === 'user' || savedUserType === 'provider') {
+            console.log('[App] Loaded saved userType:', savedUserType);
+            setUserType(savedUserType as 'user' | 'provider');
+          }
+        } catch (err) {
+          console.error('Error loading saved userType:', err);
+        }
         
         // Initialize in parallel with error handling
         await Promise.all([
@@ -146,8 +157,10 @@ function App() {
           // Continue even if token loading fails
         }
 
-        // Initialize push notifications
+        // Initialize push notifications after a delay to ensure Firebase is ready
         try {
+          // Wait longer for Firebase native modules to be fully ready
+          await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
           await pushNotificationService.initialize(token);
         } catch (error) {
           console.error('Error initializing push notifications:', error);
@@ -195,7 +208,13 @@ function App() {
   };
 
   const handleUserTypeSelected = (type: 'user' | 'provider') => {
+    console.log('[App] User type selected:', type);
+    // Set both userType and screen together to ensure they're in sync
     setUserType(type);
+    // Save userType to AsyncStorage for persistence
+    AsyncStorage.setItem('selectedUserType', type).catch(err => {
+      console.error('Error saving userType:', err);
+    });
     setCurrentScreen('auth');
   };
 
@@ -213,8 +232,10 @@ function App() {
       console.error('Error saving user data:', error);
     }
 
-    // Initialize push notifications with auth token
+    // Initialize push notifications with auth token after a delay to ensure Firebase is ready
     try {
+      // Wait longer for Firebase native modules to be fully ready
+      await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
       const token = await AsyncStorage.getItem('token');
       await pushNotificationService.initialize(token);
     } catch (error) {
@@ -279,7 +300,12 @@ function App() {
   };
 
   const handleBackToUserTypeSelection = () => {
+    console.log('[App] Back to user type selection - clearing userType');
     setUserType(null);
+    // Clear saved userType
+    AsyncStorage.removeItem('selectedUserType').catch(err => {
+      console.error('Error clearing userType:', err);
+    });
     setCurrentScreen('user-type-selection');
   };
 
@@ -409,11 +435,19 @@ function App() {
         return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
       
       case 'auth':
+        // Safety check: ensure userType is set before rendering AuthNavigator
+        if (!userType) {
+          console.warn('[App] userType is null when rendering auth screen, redirecting to user-type-selection');
+          // Don't call setCurrentScreen here as it causes infinite loop
+          // Instead, return the user type selection screen directly
+          return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
+        }
+        console.log('[App] Rendering AuthNavigator with userType:', userType);
         return (
           <AuthNavigator 
             onAuthSuccess={handleAuthSuccess} 
             onBackToUserTypeSelection={handleBackToUserTypeSelection}
-            userType={userType!}
+            userType={userType}
           />
         );
       

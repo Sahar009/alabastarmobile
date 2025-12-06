@@ -90,8 +90,11 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ onSignUp, onLogin, onBackTo
     setIsLoading(true);
     try {
       await onSignUp(formData);
-    } catch {
-      Alert.alert('Sign Up Failed', 'An error occurred. Please try again.');
+    } catch (error: any) {
+      // Extract error message from the error object
+      const errorMessage = error?.message || 'An error occurred. Please try again.';
+      console.error('Sign up error details:', error);
+      Alert.alert('Sign Up Failed', errorMessage);
     } finally {
       setIsLoading(false);
     }

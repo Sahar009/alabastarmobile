@@ -73,9 +73,33 @@ const ProviderAuthScreen: React.FC<ProviderAuthScreenProps> = ({
     setIsLoading(true);
     try {
       await onLogin(email.trim(), password);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Provider sign in failed:', error);
-      Alert.alert('Sign In Failed', 'We could not sign you in. Please verify your credentials and try again.');
+      // Show the actual error message from the API
+      const errorMessage = error?.message || 'We could not sign you in. Please verify your credentials and try again.';
+      Alert.alert(
+        'Sign In Failed', 
+        errorMessage,
+        [
+          {
+            text: 'OK',
+            style: 'default',
+          },
+          ...(errorMessage.includes('not registered as a provider') || errorMessage.includes('not a provider account') 
+            ? [{
+                text: 'Register as Provider',
+                style: 'default',
+                onPress: () => {
+                  // Navigate to provider registration if available
+                  if (onJoinProvider) {
+                    onJoinProvider();
+                  }
+                },
+              }]
+            : []
+          ),
+        ]
+      );
     } finally {
       setIsLoading(false);
     }

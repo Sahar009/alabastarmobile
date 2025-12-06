@@ -18,10 +18,9 @@ react {
     // cliFile = file("../../node_modules/react-native/cli.js")
 
     /* Variants */
-    //   The list of variants to that are debuggable. For those we're going to
-    //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
-    //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    //   Force bundling in debug builds so APK includes JS and assets
+    //   Empty array means bundle everything, even in debug builds
+    debuggableVariants = []
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -120,3 +119,120 @@ dependencies {
 
 // Apply Google Services plugin at the bottom
 apply plugin: 'com.google.gms.google-services'
+
+// Task to create stub codegen directories and fix autolinking.cpp when newArch is disabled
+// NOTE: New Architecture is now enabled, so this code is no longer needed
+// Keeping for reference in case we need to disable it again
+afterEvaluate {
+    def newArchEnabled = project.findProperty("newArchEnabled") == "true"
+    if (false && !newArchEnabled) { // Disabled - new architecture is enabled
+        def createStubDirs = {
+            def rootDir = project.rootProject.projectDir
+            def modules = [
+                [path: "@react-native-community/geolocation", target: "RNCGeolocationSpec"],
+                [path: "@react-native-clipboard/clipboard", target: "rnclipboard"],
+                [path: "@react-native-google-signin/google-signin", target: "RNGoogleSignInCGen"],
+                [path: "react-native-document-picker", target: "rndocumentpicker"],
+                [path: "react-native-image-picker", target: "RNImagePickerSpec"]
+            ]
+            modules.each { module ->
+                def dir = new File(rootDir, "node_modules/${module.path}/android/build/generated/source/codegen/jni")
+                dir.mkdirs()
+                new File(dir, "stub.cpp").text = "// Stub file for old architecture compatibility\n"
+                new File(dir, "CMakeLists.txt").text = """cmake_minimum_required(VERSION 3.13)
+set(CMAKE_VERBOSE_MAKEFILE on)
+add_library(react_codegen_${module.target} OBJECT stub.cpp)
+target_include_directories(react_codegen_${module.target} PUBLIC .)
+target_link_libraries(react_codegen_${module.target} fbjni jsi reactnative)
+"""
+            }
+        }
+        
+        def fixAutolinkingCmake = {
+            def cmakeFile = new File(project.buildDir, "generated/autolinking/src/main/jni/Android-autolinking.cmake")
+            if (cmakeFile.exists()) {
+                def content = cmakeFile.text
+                // Comment out problematic add_subdirectory calls
+                content = content.replaceAll(/add_subdirectory\(".*?@react-native-community\/geolocation.*?" RNCGeolocationSpec_autolinked_build\)/, "# Commented out for old arch\n# add_subdirectory(...)")
+                content = content.replaceAll(/add_subdirectory\(".*?@react-native-google-signin\/google-signin.*?" RNGoogleSignInCGen_autolinked_build\)/, "# Commented out for old arch")
+                content = content.replaceAll(/add_subdirectory\(".*?react-native-document-picker.*?" rndocumentpicker_autolinked_build\)/, "# Commented out for old arch")
+                content = content.replaceAll(/add_subdirectory\(".*?react-native-image-picker.*?" RNImagePickerSpec_autolinked_build\)/, "# Commented out for old arch")
+                cmakeFile.text = content
+            }
+        }
+        
+        def createStubHeaders = {
+            def rootDir = project.rootProject.projectDir
+            // Create stub header files
+            def geolocDir = new File(rootDir, "node_modules/@react-native-community/geolocation/android/build/generated/source/codegen/jni")
+            geolocDir.mkdirs()
+            new File(geolocDir, "RNCGeolocationSpec.h").text = """#pragma once
+#include <memory>
+#include <string>
+namespace facebook { namespace react {
+class TurboModule;
+struct JavaTurboModule;
+struct JavaTurboModule::InitParams;
+std::shared_ptr<TurboModule> RNCGeolocationSpec_ModuleProvider(const std::string&, const JavaTurboModule::InitParams&) { return nullptr; }
+}}
+"""
+            
+            def googleSignInDir = new File(rootDir, "node_modules/@react-native-google-signin/google-signin/android/build/generated/source/codegen/jni")
+            googleSignInDir.mkdirs()
+            new File(googleSignInDir, "RNGoogleSignInCGen.h").text = """#pragma once
+#include <memory>
+#include <string>
+namespace facebook { namespace react {
+class TurboModule;
+struct JavaTurboModule;
+struct JavaTurboModule::InitParams;
+std::shared_ptr<TurboModule> RNGoogleSignInCGen_ModuleProvider(const std::string&, const JavaTurboModule::InitParams&) { return nullptr; }
+}}
+"""
+            new File(googleSignInDir, "react/renderer/components/RNGoogleSignInCGen/ComponentDescriptors.h").text = "#pragma once\n"
+            
+            def docPickerDir = new File(rootDir, "node_modules/react-native-document-picker/android/build/generated/source/codegen/jni")
+            docPickerDir.mkdirs()
+            new File(docPickerDir, "rndocumentpicker.h").text = """#pragma once
+#include <memory>
+#include <string>
+namespace facebook { namespace react {
+class TurboModule;
+struct JavaTurboModule;
+struct JavaTurboModule::InitParams;
+std::shared_ptr<TurboModule> rndocumentpicker_ModuleProvider(const std::string&, const JavaTurboModule::InitParams&) { return nullptr; }
+}}
+"""
+            
+            def imagePickerDir = new File(rootDir, "node_modules/react-native-image-picker/android/build/generated/source/codegen/jni")
+            imagePickerDir.mkdirs()
+            new File(imagePickerDir, "RNImagePickerSpec.h").text = """#pragma once
+#include <memory>
+#include <string>
+namespace facebook { namespace react {
+class TurboModule;
+struct JavaTurboModule;
+struct JavaTurboModule::InitParams;
+std::shared_ptr<TurboModule> RNImagePickerSpec_ModuleProvider(const std::string&, const JavaTurboModule::InitParams&) { return nullptr; }
+}}
+"""
+        }
+        
+        // Create stubs, headers, and fix CMake before CMake runs
+        tasks.matching { it.name.contains('configureCMake') }.configureEach { task ->
+            task.doFirst {
+                createStubDirs()
+                createStubHeaders()
+                fixAutolinkingCmake()
+            }
+        }
+        // Also in preBuild
+        tasks.matching { it.name == 'preBuild' && it.project == project }.configureEach { task ->
+            task.doLast {
+                fixAutolinkingCmake()
+            }
+        }
+        createStubDirs()
+        createStubHeaders()
+    }
+}
