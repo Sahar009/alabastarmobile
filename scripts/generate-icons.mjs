@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
-const sourceIcon = join(process.cwd(), 'assets', 'mobileicon.png');
+const sourceIcon = join(process.cwd(), 'assets', 'IMG_3183.JPEG');
 const androidBasePath = join(process.cwd(), 'android', 'app', 'src', 'main', 'res');
 const iosBasePath = join(process.cwd(), 'ios', 'AlabastarMobile', 'Images.xcassets', 'AppIcon.appiconset');
 
@@ -170,6 +170,8 @@ async function main() {
 }
 
 main();
+
+
 
 
 

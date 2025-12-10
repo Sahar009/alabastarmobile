@@ -95,3 +95,5 @@ Complete migration to Expo managed workflow - NOT RECOMMENDED for your use case 
 ## Recommendation
 **Try Option A first (Enable New Architecture)** - it's the simplest and should resolve your build issues. Only move to Expo if absolutely necessary.
 
+
+

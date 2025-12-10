@@ -59,3 +59,5 @@ cd android && ./gradlew assembleDebug
 2. Adjust any custom native code if needed
 3. Configure EAS Build (optional) for cloud builds
 
+
+

@@ -41,6 +41,7 @@ import {
   Lock,
   Zap,
   ArrowRight,
+  X,
 } from 'lucide-react-native';
 import ProviderProfileModal from '../components/ProviderProfileModal';
 import BookingModal from '../components/BookingModal';
@@ -749,6 +750,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
     }
   };
 
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setShowSuggestions(false);
+  };
+
   const handleSuggestionSelect = (suggestion: {id: string; name: string; type: 'category' | 'subcategory'; categoryId?: string}) => {
     setShowSuggestions(false);
     
@@ -969,7 +975,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -987,35 +993,34 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            <View>
+            <View style={styles.greetingRow}>
               <Text style={styles.greeting}>
-                Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {(() => {
-                  const fullName = userData?.fullName || userData?.user?.fullName || (userData?.role === 'provider' ? 'Provider' : 'User');
-                  return fullName.length > 4 ? `${fullName.substring(0, 4)}...` : fullName;
-                })()}!
+                Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}, {userData?.fullName || userData?.user?.fullName || (userData?.role === 'provider' ? 'Provider' : 'User')}!
               </Text>
-            </View>
-            <View style={styles.headerRight}>
-              <TouchableOpacity 
-                style={[styles.refreshButton, refreshing && styles.refreshButtonActive]} 
-                onPress={onRefresh}
-                disabled={refreshing}
-              >
-                <RefreshCw 
-                  size={20} 
-                  color={refreshing ? "#ffffff" : "#ec4899"} 
-                  style={refreshing ? styles.refreshingIcon : null}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.notificationButton}
-                onPress={() => onNavigate?.('notifications')}
-              >
-                <Bell size={20} color="#ec4899" />
-                <View style={[styles.badge, unreadCount === 0 && styles.badgeEmpty]}>
-                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                </View>
-              </TouchableOpacity>
+              <View style={styles.actionsContainer}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, refreshing && styles.actionButtonActive]} 
+                  onPress={onRefresh}
+                  disabled={refreshing}
+                >
+                  <RefreshCw 
+                    size={18} 
+                    color={refreshing ? "#ffffff" : "#0f172a"} 
+                    style={refreshing ? styles.refreshingIcon : null}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => onNavigate?.('notifications')}
+                >
+                  <Bell size={18} color="#0f172a" />
+                  {unreadCount > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
           <Text style={styles.subtitle}>Find trusted businesses and professionals</Text>
@@ -1024,8 +1029,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBarContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#94a3b8" />
+            <View style={[styles.searchBar, searchQuery.length > 0 && styles.searchBarActive]}>
+              <Search size={20} color={searchQuery.length > 0 ? "#ec4899" : "#94a3b8"} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search for services..."
@@ -1036,10 +1041,23 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                 onBlur={handleSearchBlur}
                 returnKeyType="search"
                 onSubmitEditing={handleSearchPress}
+                clearButtonMode="never"
               />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearButton}
+                  onPress={handleClearSearch}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <X size={18} color="#94a3b8" />
+                </TouchableOpacity>
+              )}
             </View>
             {showSuggestions && suggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
+                <View style={styles.suggestionsHeader}>
+                  <Text style={styles.suggestionsHeaderText}>Suggestions</Text>
+                </View>
                 <FlatList
                   data={suggestions}
                   keyExtractor={(item) => item.id}
@@ -1049,13 +1067,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
                       onPress={() => handleSuggestionSelect(item)}
                       activeOpacity={0.7}
                     >
-                      <Search size={16} color="#64748b" />
+                      <View style={styles.suggestionIconContainer}>
+                        <Search size={16} color="#ec4899" />
+                      </View>
                       <View style={styles.suggestionContent}>
                         <Text style={styles.suggestionText}>{item.name}</Text>
                         <Text style={styles.suggestionType}>
                           {item.type === 'category' ? 'Category' : 'Service'}
                         </Text>
                       </View>
+                      <ArrowRight size={16} color="#cbd5e1" />
                     </TouchableOpacity>
                   )}
                   scrollEnabled={false}
@@ -1063,7 +1084,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onCategorySelect, userData, sel
               </View>
             )}
           </View>
-          <TouchableOpacity style={styles.searchButton} onPress={handleSearchPress}>
+          <TouchableOpacity 
+            style={[styles.searchButton, searchQuery.length > 0 && styles.searchButtonActive]} 
+            onPress={handleSearchPress}
+            disabled={!searchQuery.trim()}
+          >
             <Search size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
@@ -1246,7 +1271,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 100,
   },
   header: {
@@ -1262,59 +1287,35 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 8,
   },
-  headerRight: {
+  greetingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 12,
-  },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#fdf2f8',
-    borderWidth: 1,
-    borderColor: '#fce7f3',
-  },
-  refreshButtonActive: {
-    backgroundColor: '#ec4899',
-    borderColor: '#ec4899',
   },
   refreshingIcon: {
     transform: [{ rotate: '180deg' }],
   },
-  notificationButton: {
-    position: 'relative',
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: '#fdf2f8',
-    borderWidth: 1,
-    borderColor: '#fce7f3',
-  },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: 2,
+    right: 2,
     backgroundColor: '#ef4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    borderRadius: 8,
+    minWidth: 18,
+    height: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     borderWidth: 2,
     borderColor: '#ffffff',
   },
   badgeText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
-  },
-  badgeEmpty: {
-    backgroundColor: '#94a3b8',
   },
   greeting: {
     fontSize: 22,
@@ -1322,6 +1323,36 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.3,
     marginBottom: 4,
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 200,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#0f172a',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 10,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  actionButtonActive: {
+    backgroundColor: '#0f172a',
   },
   userName: {
     fontSize: 28,
@@ -1359,6 +1390,19 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
+  searchBarActive: {
+    borderColor: '#ec4899',
+    shadowColor: '#ec4899',
+    shadowOpacity: 0.15,
+  },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   searchBarContainer: {
     flex: 1,
     position: 'relative',
@@ -1386,17 +1430,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     zIndex: 1000,
+    overflow: 'hidden',
+  },
+  suggestionsHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  suggestionsHeaderText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+  },
+  suggestionIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fdf2f8',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   suggestionContent: {
     flex: 1,
     marginLeft: 12,
+    marginRight: 8,
   },
   suggestionText: {
     fontSize: 15,
@@ -1409,14 +1478,24 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   searchButton: {
-    backgroundColor: '#ec4899',
+    backgroundColor: '#cbd5e1',
     borderRadius: 16,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    opacity: 0.6,
+  },
+  searchButtonActive: {
+    backgroundColor: '#ec4899',
     shadowColor: '#ec4899',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 5,
+    opacity: 1,
   },
   section: {
     marginTop: 8,

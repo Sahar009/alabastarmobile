@@ -3,7 +3,7 @@
 # Script to generate iOS app icons with larger logo
 # This script uses ImageMagick or sips (macOS built-in) to resize the logo
 
-SOURCE_ICON="assets/mobileicon.png"
+SOURCE_ICON="assets/IMG_3183.JPEG"
 OUTPUT_DIR="ios/AlabastarMobile/Images.xcassets/AppIcon.appiconset"
 
 # Check if source icon exists
@@ -26,8 +26,8 @@ resize_image() {
     local output=$2
     
     if command -v sips &> /dev/null; then
-        # Use macOS built-in sips command
-        sips -z $size $size "$SOURCE_ICON" --out "$output" > /dev/null 2>&1
+        # Use macOS built-in sips command - convert to PNG and resize
+        sips -s format png -z $size $size "$SOURCE_ICON" --out "$output" > /dev/null 2>&1
     elif command -v convert &> /dev/null; then
         # Use ImageMagick convert command
         convert "$SOURCE_ICON" -resize "${size}x${size}" "$output"

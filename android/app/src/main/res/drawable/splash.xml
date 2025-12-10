@@ -3,10 +3,6 @@
     <!-- Background color -->
     <item android:drawable="@color/ic_launcher_background" />
     
-    <!-- Logo centered -->
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@drawable/logo" />
-    </item>
+    <!-- Logo centered with size constraints (scaled to fit nicely) -->
+    <item android:drawable="@drawable/logo_scaled" />
 </layer-list>

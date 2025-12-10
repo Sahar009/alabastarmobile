@@ -97,3 +97,5 @@ This aligns with React Native 0.82 requirements and should fix build issues.
 Try **Option 2 (Enable New Architecture) first** - it's simpler and aligns with RN 0.82.
 Only use Expo Prebuild if that doesn't work.
 
+
+
