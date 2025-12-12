@@ -34,6 +34,11 @@ const iosSizes = [
 async function generateIcon(size, outputPath, isRound = false) {
   try {
     const actualSize = size;
+    // Add padding to make icon smaller (26% padding = 48% of original size, reduced by 20% from previous 60%)
+    const paddingPercent = 0.26;
+    const iconSize = Math.floor(actualSize * (1 - paddingPercent * 2));
+    const padding = Math.floor((actualSize - iconSize) / 2);
+    
     let image = sharp(sourceIcon);
     
     if (isRound) {
@@ -44,8 +49,8 @@ async function generateIcon(size, outputPath, isRound = false) {
         </svg>
       `;
       
-      // Resize the icon
-      image = image.resize(actualSize, actualSize, { fit: 'cover' });
+      // Resize the icon to fit within padding
+      image = image.resize(iconSize, iconSize, { fit: 'cover' });
       
       // Create rounded mask
       const roundedMask = Buffer.from(svg);
@@ -54,7 +59,7 @@ async function generateIcon(size, outputPath, isRound = false) {
         .greyscale()
         .toBuffer();
       
-      // Composite: resize icon, then apply rounded mask
+      // Composite: resize icon, center it, then apply rounded mask
       const resized = await image.toBuffer();
       await sharp({
         create: {
@@ -65,20 +70,33 @@ async function generateIcon(size, outputPath, isRound = false) {
         }
       })
         .composite([
-          { input: resized, gravity: 'center' },
+          { input: resized, left: padding, top: padding },
           { input: mask, blend: 'dest-in' }
         ])
         .png()
         .toFile(outputPath);
     } else {
-      // Square icon with slight rounding (Android adaptive icon style)
-      await image
-        .resize(actualSize, actualSize, { fit: 'cover' })
+      // Square icon with padding (centered)
+      const resized = await image
+        .resize(iconSize, iconSize, { fit: 'cover' })
+        .toBuffer();
+      
+      await sharp({
+        create: {
+          width: actualSize,
+          height: actualSize,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 0 } // Transparent background
+        }
+      })
+        .composite([
+          { input: resized, left: padding, top: padding }
+        ])
         .png()
         .toFile(outputPath);
     }
     
-    console.log(`✓ Generated ${outputPath} (${actualSize}x${actualSize})`);
+    console.log(`✓ Generated ${outputPath} (${actualSize}x${actualSize} with ${iconSize}x${iconSize} icon)`);
   } catch (error) {
     console.error(`✗ Error generating ${outputPath}:`, error.message);
   }

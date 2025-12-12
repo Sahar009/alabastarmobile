@@ -20,18 +20,34 @@ fi
 
 echo "🖼️  Generating Android app icons from $SOURCE_ICON..."
 
-# Function to resize image (using sips on macOS or convert if ImageMagick is available)
+# Function to resize image with padding (using sips on macOS or convert if ImageMagick is available)
 resize_image() {
     local width=$1
     local height=$2
     local output=$3
     
+    # Add 26% padding (icon will be 48% of total size, centered - reduced by 20% from previous 60%)
+    local icon_width=$((width * 48 / 100))
+    local icon_height=$((height * 48 / 100))
+    
     if command -v sips &> /dev/null; then
-        # Use macOS built-in sips command - convert to PNG and resize
-        sips -s format png -z $height $width "$SOURCE_ICON" --out "$output" > /dev/null 2>&1
+        # Create temporary resized icon
+        local temp_icon="/tmp/icon_${width}x${height}.png"
+        sips -s format png -z $icon_height $icon_width "$SOURCE_ICON" --out "$temp_icon" > /dev/null 2>&1
+        
+        # Create canvas with padding and composite icon in center
+        if command -v convert &> /dev/null; then
+            convert -size ${width}x${height} xc:none "$temp_icon" -gravity center -composite "$output"
+            rm -f "$temp_icon"
+        else
+            # Fallback: just resize without padding if ImageMagick not available
+            sips -s format png -z $height $width "$SOURCE_ICON" --out "$output" > /dev/null 2>&1
+        fi
     elif command -v convert &> /dev/null; then
-        # Use ImageMagick convert command
-        convert "$SOURCE_ICON" -resize "${width}x${height}" "$output"
+        # Use ImageMagick: resize icon and center on transparent canvas
+        convert -size ${width}x${height} xc:none \
+                \( "$SOURCE_ICON" -resize ${icon_width}x${icon_height} \) \
+                -gravity center -composite "$output"
     else
         echo "⚠️  Neither sips nor ImageMagick found. Please install ImageMagick or use macOS."
         return 1

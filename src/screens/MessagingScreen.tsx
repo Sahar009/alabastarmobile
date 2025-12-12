@@ -24,7 +24,6 @@ import {
   Image as ImageIcon,
   Paperclip,
   MoreVertical,
-  PhoneCall,
   MessageSquare,
 } from 'lucide-react-native';
 import { messagingService, Conversation, Message } from '../services/messagingService';
@@ -784,12 +783,12 @@ const MessagingScreen: React.FC<MessagingScreenProps> = ({
               
               return (
                 <>
-                  <TouchableOpacity 
+                  {/* <TouchableOpacity 
                     style={styles.headerActionButton}
                     onPress={() => dialParticipant(phone)}
                   >
                     <PhoneCall size={18} color="#0f172a" />
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                   <TouchableOpacity 
                     style={styles.headerActionButton}
                     onPress={() => openWhatsAppForParticipant(phone)}

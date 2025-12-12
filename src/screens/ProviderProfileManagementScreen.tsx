@@ -13,8 +13,10 @@ import {
   Modal,
   FlatList,
   Animated,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
   Award,
@@ -31,13 +33,17 @@ import {
 } from 'lucide-react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { apiService, API_BASE_URL } from '../services/api';
-import { providerOnboardingService } from '../services/providerOnboardingService';
 
 interface ProviderProfileManagementScreenProps {
   userData: any;
   onBack?: () => void;
   onNavigate?: (screen: string) => void;
   onLogout?: () => void;
+}
+
+interface PortfolioItem {
+  id: string; // Document ID for deletion
+  url: string; // Image URL
 }
 
 interface ProviderProfile {
@@ -51,7 +57,7 @@ interface ProviderProfile {
   latitude?: string;
   longitude?: string;
   verificationStatus?: string;
-  portfolio: string[];
+  portfolio: PortfolioItem[]; // Changed to array of objects with id and url
 }
 
 interface CategoryOption {
@@ -203,7 +209,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     bio: '',
     locationCity: '',
     locationState: '',
-    portfolio: [],
+    portfolio: [], // Array of { id, url }
   });
   const [originalProfile, setOriginalProfile] = useState<ProviderProfile | null>(null);
   const [verificationStatus, setVerificationStatus] = useState<string>('pending');
@@ -258,37 +264,50 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       if (response.success && response.data) {
         const provider = response.data;
         
-        // Extract brand images from ProviderDocuments array
-        let brandImageUrls: string[] = [];
+        // Extract brand images from ProviderDocuments array with document IDs
+        let portfolioItems: PortfolioItem[] = [];
         if (provider.ProviderDocuments && Array.isArray(provider.ProviderDocuments)) {
-          brandImageUrls = provider.ProviderDocuments
-            .filter((doc: any) => doc.type === 'brand_image' && doc.url)
-            .map((doc: any) => doc.url);
+          portfolioItems = provider.ProviderDocuments
+            .filter((doc: any) => doc.type === 'brand_image' && doc.url && doc.id)
+            .map((doc: any) => ({
+            id: doc.id,
+            url: doc.url,
+            }));
         }
         
-        // Handle portfolio from different possible structures
-        let portfolioUrls: string[] = [];
-        
-        // Check direct portfolio array
-        if (Array.isArray(provider.portfolio)) {
-          portfolioUrls = provider.portfolio.map((img: any) => 
-            typeof img === 'string' ? img : (img.url || img)
-          );
+        // If no documents found, try other structures (for backward compatibility)
+        if (portfolioItems.length === 0) {
+          // Check direct portfolio array
+          if (Array.isArray(provider.portfolio)) {
+            portfolioItems = provider.portfolio.map((img: any, index: number) => {
+              if (typeof img === 'string') {
+                // If it's just a URL string, generate a temporary ID
+                return {
+                  id: `temp-${index}-${Date.now()}`,
+                  url: img,
+                };
+              }
+              return {
+                id: img.id || `temp-${index}-${Date.now()}`,
+                url: img.url || img,
+              };
+            });
+          }
+          // Check portfolio.images structure
+          else if (provider.portfolio?.images && Array.isArray(provider.portfolio.images)) {
+            portfolioItems = provider.portfolio.images.map((img: any, index: number) => ({
+              id: img.id || `temp-${index}-${Date.now()}`,
+              url: img.url || img,
+            }));
+          }
+          // Check brandImages array
+          else if (Array.isArray(provider.brandImages)) {
+            portfolioItems = provider.brandImages.map((img: any, index: number) => ({
+              id: img.id || `temp-${index}-${Date.now()}`,
+              url: img.url || img,
+            }));
+          }
         }
-        // Check portfolio.images structure
-        else if (provider.portfolio?.images && Array.isArray(provider.portfolio.images)) {
-          portfolioUrls = provider.portfolio.images.map((img: any) => img.url || img);
-        }
-        // Check brandImages array
-        else if (Array.isArray(provider.brandImages)) {
-          portfolioUrls = provider.brandImages.map((img: any) => img.url || img);
-        }
-        
-        // Combine brand images from ProviderDocuments with portfolio images
-        // Use brand images if available, otherwise fall back to portfolio
-        const allPortfolioImages = brandImageUrls.length > 0 
-          ? brandImageUrls 
-          : portfolioUrls;
         
         const normalized: ProviderProfile = {
           id: provider.id,
@@ -300,13 +319,12 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
           locationState: provider.locationState || '',
           latitude: provider.latitude || '',
           longitude: provider.longitude || '',
-          portfolio: allPortfolioImages,
+          portfolio: portfolioItems,
         };
         
         console.log('[ProviderProfileManagementScreen] ✅ Loaded profile:', {
-          brandImagesFromDocs: brandImageUrls.length,
-          portfolioUrls: portfolioUrls.length,
-          finalPortfolio: allPortfolioImages.length,
+          portfolioItems: portfolioItems.length,
+          itemsWithIds: portfolioItems.filter(item => !item.id.startsWith('temp-')).length,
         });
         
         setProfile(normalized);
@@ -349,6 +367,9 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
 
     try {
       setSaving(true);
+      // Extract just URLs for portfolio (backend expects array of URLs)
+      const portfolioUrls = profile.portfolio.map(item => item.url);
+      
       const response = await apiService.updateProviderProfile({
         businessName: profile.businessName,
         category: profile.category,
@@ -358,7 +379,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
         locationState: profile.locationState,
         latitude: profile.latitude,
         longitude: profile.longitude,
-        portfolio: profile.portfolio,
+        portfolio: portfolioUrls,
       });
       if (response.success) {
         setOriginalProfile(profile);
@@ -381,63 +402,214 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       return;
     }
 
+    if (!profile.id) {
+      Alert.alert('Error', 'Provider profile ID not found. Please refresh and try again.');
+        return;
+    }
+
+    try {
     launchImageLibrary(
       {
         mediaType: 'photo',
         selectionLimit: 1,
         quality: 0.8,
+          includeBase64: false, // Don't include base64 for better performance
       },
       async (response) => {
+          // Handle errors first
+          if (response.errorCode) {
+            console.error('Image picker error:', response.errorCode, response.errorMessage);
+            if (response.errorCode === 'permission') {
+              Alert.alert('Permission Denied', 'Please grant photo library access to upload images.');
+            } else if (response.errorCode === 'others') {
+              Alert.alert('Error', response.errorMessage || 'Failed to access image library.');
+            } else {
+              Alert.alert('Error', 'Failed to select image. Please try again.');
+            }
+            return;
+          }
+
         if (response.didCancel) {
           return;
         }
+
         const asset = response.assets?.[0];
         if (!asset?.uri) {
           Alert.alert('Upload Failed', 'Unable to read selected image.');
           return;
         }
 
-        try {
-          setPortfolioLoading(true);
-          
-          // Create FormData for the image
-          const formData = new FormData();
-          formData.append('brandImages', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || `portfolio_${Date.now()}.jpg`,
-          } as any);
-          
-          // Upload using uploadBrandImages method
-          const upload = await providerOnboardingService.uploadBrandImages(formData);
-          
-          if (upload.success && upload.files && upload.files.length > 0) {
-            // Extract URL from the first uploaded file
-            const url = upload.files[0].url;
-            const updatedPortfolio = [...profile.portfolio, url].slice(0, MAX_PORTFOLIO);
-            const updated = { ...profile, portfolio: updatedPortfolio };
-            setProfile(updated);
-            if (!editing) {
-              setEditing(true);
+          try {
+            setPortfolioLoading(true);
+            
+            // Get token for authentication
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+              Alert.alert('Authentication Error', 'Please sign in again.');
+          return;
+        }
+
+            // Normalize URI for Android (handle content:// URIs)
+            let imageUri = asset.uri;
+            // Android content URIs are handled correctly by React Native FormData
+            // No need to modify them
+            
+            // Generate proper file name and type for Android
+            const fileName = asset.fileName || 
+              (asset.uri.includes('/') ? asset.uri.split('/').pop() : null) ||
+              `portfolio_${Date.now()}.jpg`;
+            
+            // Determine MIME type
+            let mimeType = asset.type || 'image/jpeg';
+            if (!mimeType || mimeType === 'image') {
+              // Fallback: determine from file extension
+              const ext = fileName.split('.').pop()?.toLowerCase();
+              if (ext === 'png') {
+                mimeType = 'image/png';
+              } else if (ext === 'jpg' || ext === 'jpeg') {
+                mimeType = 'image/jpeg';
+              } else {
+                mimeType = 'image/jpeg'; // Default
+              }
             }
+            
+            // Create FormData for the image
+          const formData = new FormData();
+          formData.append('documents', {
+              uri: imageUri,
+              type: mimeType,
+              name: fileName,
+          } as any);
+          formData.append('type', 'brand_image');
+
+            console.log('[ProviderProfileManagementScreen] Uploading image:', {
+              uri: imageUri.substring(0, 50) + '...',
+              type: mimeType,
+              name: fileName,
+              platform: Platform.OS,
+            });
+            
+            // Upload to /api/providers/{providerId}/documents
+            const uploadResponse = await fetch(`${API_BASE_URL}/providers/${profile.id}/documents`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                // Don't set Content-Type, let FormData set it with boundary
+              },
+              body: formData,
+            });
+            
+            // Check if response is OK before parsing JSON
+            if (!uploadResponse.ok) {
+              let errorMessage = `Upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`;
+              try {
+                const errorText = await uploadResponse.text();
+                const errorData = JSON.parse(errorText);
+                errorMessage = errorData.message || errorMessage;
+              } catch {
+                // If parsing fails, use default error message
+              }
+              console.error('Upload failed:', {
+                status: uploadResponse.status,
+                statusText: uploadResponse.statusText,
+                error: errorMessage,
+              });
+              throw new Error(errorMessage);
+            }
+            
+            const uploadData = await uploadResponse.json();
+            
+            if (uploadData.success && uploadData.data) {
+              // Extract document ID and URL from response
+              const document = uploadData.data;
+              const newItem: PortfolioItem = {
+                id: document.id,
+                url: document.url,
+              };
+              
+              const updatedPortfolio = [...profile.portfolio, newItem].slice(0, MAX_PORTFOLIO);
+              const updated = { ...profile, portfolio: updatedPortfolio };
+              setProfile(updated);
+              if (!editing) {
+                setEditing(true);
+              }
+              Alert.alert('Success', 'Portfolio image uploaded successfully.');
           } else {
-            Alert.alert('Upload Failed', 'Unable to upload portfolio image.');
+              Alert.alert('Upload Failed', uploadData.message || 'Unable to upload portfolio image.');
           }
         } catch (error: any) {
-          console.error('Portfolio upload error', error);
-          Alert.alert('Upload Error', error?.message || 'Unable to upload image.');
+            console.error('Portfolio upload error', error);
+            Alert.alert('Upload Error', error?.message || 'Unable to upload image.');
         } finally {
           setPortfolioLoading(false);
         }
       },
     );
+    } catch (error: any) {
+      console.error('Image picker launch error:', error);
+      Alert.alert('Error', 'Failed to open image picker. Please try again.');
+    }
   };
 
-  const handleRemovePortfolioImage = (index: number) => {
-    const updated = profile.portfolio.filter((_, idx) => idx !== index);
-    setProfile({ ...profile, portfolio: updated });
-    if (!editing) {
-      setEditing(true);
+  const handleRemovePortfolioImage = async (index: number) => {
+    const itemToRemove = profile.portfolio[index];
+    if (!itemToRemove) {
+      return;
+    }
+
+    // If it's a temporary ID (from old data), just remove it locally
+    if (itemToRemove.id.startsWith('temp-')) {
+      const updated = profile.portfolio.filter((_, idx) => idx !== index);
+      setProfile({ ...profile, portfolio: updated });
+      if (!editing) {
+        setEditing(true);
+      }
+      return;
+    }
+
+    // If we have a real document ID, delete it from the server
+    if (!profile.id) {
+      Alert.alert('Error', 'Provider profile ID not found.');
+          return;
+        }
+
+    try {
+      setPortfolioLoading(true);
+      
+      // Get token for authentication
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Authentication Error', 'Please sign in again.');
+          return;
+        }
+
+      // Delete from /api/providers/{providerId}/documents/{documentId}
+      const deleteResponse = await fetch(`${API_BASE_URL}/providers/${profile.id}/documents/${itemToRemove.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const deleteData = await deleteResponse.json();
+      
+      if (deleteResponse.ok && deleteData.success) {
+        // Remove from local state
+        const updated = profile.portfolio.filter((_, idx) => idx !== index);
+        setProfile({ ...profile, portfolio: updated });
+        if (!editing) {
+          setEditing(true);
+        }
+        Alert.alert('Success', 'Portfolio image deleted successfully.');
+      } else {
+        Alert.alert('Delete Failed', deleteData.message || 'Unable to delete portfolio image.');
+      }
+        } catch (error: any) {
+      console.error('Portfolio delete error', error);
+      Alert.alert('Delete Error', error?.message || 'Unable to delete image.');
+        } finally {
+      setPortfolioLoading(false);
     }
   };
 
@@ -474,14 +646,14 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       if (response.success && response.data?.subcategories) {
         console.log('[ProviderProfileManagementScreen] ✅ Loaded subcategories:', response.data.subcategories.length);
         setAvailableSubcategories(response.data.subcategories);
-      } else {
+              } else {
         console.warn('[ProviderProfileManagementScreen] ⚠️ No subcategories found');
         setAvailableSubcategories([]);
-      }
-    } catch (error: any) {
+              }
+            } catch (error: any) {
       console.error('[ProviderProfileManagementScreen] ❌ Error loading subcategories:', error);
       setAvailableSubcategories([]);
-    } finally {
+            } finally {
       setLoadingSubcategories(false);
     }
   }, []);
@@ -508,7 +680,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
     if (profile.subcategories.includes(normalized)) {
       // Remove if already selected
       setProfile({ ...profile, subcategories: profile.subcategories.filter((item) => item !== normalized) });
-    } else {
+      } else {
       // Add if not selected
       setProfile({ ...profile, subcategories: [...profile.subcategories, normalized] });
     }
@@ -583,12 +755,12 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
       {loading && !refreshing ? (
         <ProfileSkeletonLoader />
       ) : (
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} />}
-        >
-          <View style={styles.sectionCard}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} />}
+      >
+        <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View>
               <Text style={styles.sectionHeading}>Business Information</Text>
@@ -739,20 +911,22 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               <Text style={styles.sectionHeading}>Portfolio</Text>
               <Text style={styles.sectionSubtitle}>Showcase your recent work</Text>
             </View>
-            <Text style={styles.sectionHint}>{profile.portfolio.length}/{MAX_PORTFOLIO}</Text>
+              <Text style={styles.sectionHint}>{profile.portfolio.length}/{MAX_PORTFOLIO}</Text>
+            {/* <Text>{console.log(profile)}</Text> */}
           </View>
 
           <View style={styles.portfolioGrid}>
-            {profile.portfolio.map((url, index) => (
-              <View key={`${url}-${index}`} style={styles.portfolioItem}>
-                <Image source={{ uri: url }} style={styles.portfolioImage} />
+            {profile.portfolio.map((item, index) => (
+              <View key={`${item.id}-${index}`} style={styles.portfolioItem}>
+                <Image source={{ uri: item.url }} style={styles.portfolioImage} />
                 {editing && (
-                  <TouchableOpacity
+              <TouchableOpacity
                     style={styles.portfolioRemove}
                     onPress={() => handleRemovePortfolioImage(index)}
+                    disabled={portfolioLoading}
                   >
                     <Trash2 size={16} color="#fff" />
-                  </TouchableOpacity>
+              </TouchableOpacity>
                 )}
               </View>
             ))}
@@ -788,18 +962,18 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
 
         {/* Sign Out */}
         {onLogout && (
-          <TouchableOpacity
-            style={styles.logoutButton}
+            <TouchableOpacity
+              style={styles.logoutButton}
             onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <LogOut size={20} color="#ef4444" />
-            <Text style={styles.logoutText}>Sign Out</Text>
-          </TouchableOpacity>
+              activeOpacity={0.7}
+            >
+              <LogOut size={20} color="#ef4444" />
+              <Text style={styles.logoutText}>Sign Out</Text>
+            </TouchableOpacity>
         )}
 
         <View style={styles.bottomSpacer} />
-        </ScrollView>
+      </ScrollView>
       )}
 
       {/* Category Selection Modal */}
@@ -817,7 +991,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
                 <X size={24} color="#64748b" />
               </TouchableOpacity>
             </View>
-            
+
             <Text style={styles.modalSubtitle}>
               Choose the primary category that best describes your business.
             </Text>
@@ -833,8 +1007,8 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
                 keyExtractor={(item) => item.value}
                 renderItem={({ item }) => {
                   const isSelected = profile.category === item.value;
-                  return (
-                    <TouchableOpacity
+                    return (
+                          <TouchableOpacity
                       style={[
                         styles.subcategoryItem,
                         isSelected && styles.subcategoryItemSelected,
@@ -872,9 +1046,9 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               onPress={() => setShowCategoryModal(false)}
             >
               <Text style={styles.modalDoneButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+                          </TouchableOpacity>
+                          </View>
+                      </View>
       </Modal>
 
       {/* Subcategory Selection Modal */}
@@ -891,7 +1065,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               <TouchableOpacity onPress={handleCloseSubcategoryModal} style={styles.modalCloseButton}>
                 <X size={24} color="#64748b" />
               </TouchableOpacity>
-            </View>
+                </View>
             
             <Text style={styles.modalSubtitle}>
               Choose the services you offer. You can add custom ones later.
@@ -909,7 +1083,7 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
                 renderItem={({ item }) => {
                   const isSelected = profile.subcategories.includes(item.toLowerCase().trim());
                   return (
-                    <TouchableOpacity
+                <TouchableOpacity
                       style={[
                         styles.subcategoryItem,
                         isSelected && styles.subcategoryItemSelected,
@@ -942,12 +1116,12 @@ const ProviderProfileManagementScreen: React.FC<ProviderProfileManagementScreenP
               </View>
             )}
 
-            <TouchableOpacity
+              <TouchableOpacity
               style={styles.modalDoneButton}
               onPress={handleCloseSubcategoryModal}
             >
               <Text style={styles.modalDoneButtonText}>Done</Text>
-            </TouchableOpacity>
+              </TouchableOpacity>
           </View>
         </View>
       </Modal>
