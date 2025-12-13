@@ -56,6 +56,7 @@ interface ProvidersScreenProps {
   onBack: () => void;
   selectedCategory: string;
   selectedLocation: string;
+  searchQuery?: string;
 }
 
 // Using Provider type from providerService
@@ -69,6 +70,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   onBack, 
   selectedCategory, 
   selectedLocation,
+  searchQuery,
 }) => {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<Provider[]>([]);
@@ -91,8 +93,13 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const skeletonPulse = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
-    setActiveCategory(selectedCategory);
-  }, [selectedCategory]);
+    // If there's a search query, clear the active category to prioritize search
+    if (searchQuery && searchQuery.trim()) {
+      setActiveCategory(undefined);
+    } else {
+      setActiveCategory(selectedCategory);
+    }
+  }, [selectedCategory, searchQuery]);
 
   const getMockProviders = React.useCallback((): Provider[] => {
     const mockProviders = [
@@ -171,9 +178,15 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
       };
 
       let data;
-      if (activeCategory) {
+      // If there's a search query, use searchProviders with the search parameter
+      if (searchQuery && searchQuery.trim()) {
+        filters.search = searchQuery.trim();
+        data = await providerService.searchProviders(filters);
+      } else if (activeCategory) {
+        // If there's a category but no search query, use category endpoint
         data = await providerService.getProvidersByCategory(activeCategory, filters);
       } else {
+        // Otherwise, search all providers
         data = await providerService.searchProviders(filters);
       }
       
@@ -190,7 +203,7 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [activeCategory, selectedLocation, getMockProviders]);
+  }, [activeCategory, selectedLocation, searchQuery, getMockProviders]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -277,9 +290,119 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
   const renderListSkeletons = () =>
     Array.from({ length: 4 }).map((_, idx) => (
       <View key={`provider-skeleton-${idx}`} style={[styles.providerCard, styles.skeletonCard]}>
+        {/* Provider Info Section */}
+        <View style={styles.skeletonProviderInfo}>
+          {/* Avatar Skeleton */}
+          <Animated.View
+            style={[
+              styles.skeletonAvatar,
+              { opacity: skeletonPulse },
+            ]}
+          />
+          
+          {/* Details Skeleton */}
+          <View style={styles.skeletonDetails}>
+            {/* Business Name */}
+            <Animated.View
+              style={[
+                styles.skeletonTextLine,
+                styles.skeletonTextLineLarge,
+                { opacity: skeletonPulse },
+              ]}
+            />
+            {/* Owner Name */}
+            <Animated.View
+              style={[
+                styles.skeletonTextLine,
+                styles.skeletonTextLineMedium,
+                styles.skeletonTextLineSpacing,
+                { opacity: skeletonPulse },
+              ]}
+            />
+            {/* Rating */}
+            <View style={styles.skeletonRatingRow}>
+              <Animated.View
+                style={[
+                  styles.skeletonStar,
+                  { opacity: skeletonPulse },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.skeletonTextLine,
+                  styles.skeletonTextLineSmall,
+                  styles.skeletonRatingText,
+                  { opacity: skeletonPulse },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.skeletonTextLine,
+                  styles.skeletonTextLineSmall,
+                  styles.skeletonReviewsText,
+                  { opacity: skeletonPulse },
+                ]}
+              />
+            </View>
+            {/* Location */}
+            <View style={styles.skeletonLocationRow}>
+              <Animated.View
+                style={[
+                  styles.skeletonIcon,
+                  { opacity: skeletonPulse },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.skeletonTextLine,
+                  styles.skeletonTextLineSmall,
+                  styles.skeletonLocationText,
+                  { opacity: skeletonPulse },
+                ]}
+              />
+            </View>
+            {/* Availability */}
+            <Animated.View
+              style={[
+                styles.skeletonTextLine,
+                styles.skeletonTextLineSmall,
+                styles.skeletonAvailabilityText,
+                { opacity: skeletonPulse },
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* Subcategories Skeleton */}
+        <View style={styles.skeletonSubcategories}>
+          {[1, 2, 3].map((i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.skeletonChip,
+                { opacity: skeletonPulse },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Brand Images Grid Skeleton */}
+        <View style={styles.skeletonBrandImages}>
+          {[1, 2, 3].map((i) => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.skeletonBrandImage,
+                { opacity: skeletonPulse },
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Availability Badge Skeleton */}
         <Animated.View
           style={[
-            styles.listSkeletonOverlay,
+            styles.skeletonAvailabilityBadge,
             { opacity: skeletonPulse },
           ]}
         />
@@ -327,9 +450,11 @@ const ProvidersScreen: React.FC<ProvidersScreenProps> = ({
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
-            {activeCategory 
-              ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Providers` 
-              : 'All Providers'}
+            {searchQuery && searchQuery.trim()
+              ? `Search: "${searchQuery.trim()}"`
+              : activeCategory 
+                ? `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Providers` 
+                : 'All Providers'}
           </Text>
           <Text style={styles.headerSubtitle}>
             {selectedLocation} • Showing {displayedProviders.length} of {filteredProviders.length} providers
@@ -1252,13 +1377,125 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   skeletonCard: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#f1f5f9',
-    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+    overflow: 'visible',
   },
   listSkeletonOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(236, 72, 153, 0.08)',
+  },
+  skeletonProviderInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  skeletonAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#f1f5f9',
+    marginRight: 16,
+  },
+  skeletonDetails: {
+    flex: 1,
+  },
+  skeletonTextLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonTextLineLarge: {
+    height: 20,
+    width: '70%',
+    borderRadius: 10,
+  },
+  skeletonTextLineMedium: {
+    height: 14,
+    width: '50%',
+  },
+  skeletonTextLineSmall: {
+    height: 12,
+    width: '40%',
+  },
+  skeletonTextLineSpacing: {
+    marginTop: 8,
+  },
+  skeletonRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  skeletonStar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonRatingText: {
+    width: 40,
+    marginLeft: 6,
+  },
+  skeletonReviewsText: {
+    width: 60,
+    marginLeft: 8,
+  },
+  skeletonLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  skeletonIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonLocationText: {
+    width: 120,
+    marginLeft: 6,
+  },
+  skeletonAvailabilityText: {
+    width: 80,
+    marginTop: 6,
+  },
+  skeletonSubcategories: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  skeletonChip: {
+    height: 24,
+    width: 80,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonBrandImages: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  skeletonBrandImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+  },
+  skeletonAvailabilityBadge: {
+    height: 32,
+    width: 120,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignSelf: 'flex-start',
   },
   logoutButton: {
     flexDirection: 'row',
