@@ -24,6 +24,7 @@ import {
   Image as ImageIcon,
   Paperclip,
   MoreVertical,
+  PhoneCall,
   MessageSquare,
 } from 'lucide-react-native';
 import { messagingService, Conversation, Message } from '../services/messagingService';

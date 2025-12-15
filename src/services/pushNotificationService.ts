@@ -38,11 +38,9 @@ async function loadMessagingModule(): Promise<any> {
     messagingLoaded = true;
     console.log('[PushNotificationService] ✅ Firebase messaging module loaded');
     return messaging;
-  } catch (error: any) {
-    console.error('[PushNotificationService] ❌ Failed to load messaging module:', error?.message || error);
-    // Return null instead of throwing to allow graceful degradation
-    messagingLoaded = true; // Mark as loaded to prevent retry loops
-    return null;
+  } catch (error) {
+    console.error('[PushNotificationService] ❌ Failed to load messaging module:', error);
+    throw error;
   }
 }
 
@@ -84,31 +82,19 @@ class PushNotificationService {
   private async getMessagingInstance(): Promise<any | null> {
     try {
       const messagingModule = await loadMessagingModule();
-      if (!messagingModule) {
-        console.warn('[PushNotificationService] ⚠️ Messaging module not available');
-        return null;
+      if (messagingModule && typeof messagingModule === 'function') {
+        return messagingModule();
       }
-      if (typeof messagingModule === 'function') {
-        const instance = messagingModule();
-        if (instance) {
-          return instance;
-        }
-      }
-      // If it's already an instance, return it
-      if (messagingModule && typeof messagingModule.getToken === 'function') {
-        return messagingModule;
-      }
-    } catch (error: any) {
-      console.warn('[PushNotificationService] ⚠️ Failed to get messaging instance:', error?.message || error);
+    } catch (error) {
+      console.warn('[PushNotificationService] ⚠️ Failed to get messaging instance:', error);
     }
     return null;
   }
 
   /**
    * Wait for Firebase native module to be ready
-   * Returns true if ready, false if not available (non-blocking)
    */
-  private async waitForFirebaseReady(): Promise<boolean> {
+  private async waitForFirebaseReady(): Promise<void> {
     const maxRetries = 10;
     const retryDelay = 500;
     
@@ -117,7 +103,7 @@ class PushNotificationService {
         const messagingInstance = await this.getMessagingInstance();
         if (messagingInstance) {
           console.log('[PushNotificationService] ✅ Firebase messaging module is ready');
-          return true;
+          return;
         }
       } catch {
         console.log(`[PushNotificationService] ⏳ Waiting for Firebase to be ready (attempt ${i + 1}/${maxRetries})...`);
@@ -126,8 +112,7 @@ class PushNotificationService {
       await new Promise<void>(resolve => setTimeout(resolve, retryDelay));
     }
     
-    console.warn('[PushNotificationService] ⚠️ Firebase messaging module not available after waiting. Push notifications will be disabled.');
-    return false;
+    throw new Error('Firebase messaging module not available after waiting');
   }
 
   /**
@@ -142,14 +127,8 @@ class PushNotificationService {
     try {
       console.log('[PushNotificationService] 🚀 Initializing push notification service...');
       
-      // Wait for Firebase to be ready (non-blocking)
-      const firebaseReady = await this.waitForFirebaseReady();
-      
-      if (!firebaseReady) {
-        console.warn('[PushNotificationService] ⚠️ Firebase not available. Push notifications disabled.');
-        this.isInitialized = true; // Mark as initialized to prevent retry loops
-        return;
-      }
+      // Wait for Firebase to be ready
+      await this.waitForFirebaseReady();
       
       // Store auth token if provided
       if (authToken) {
@@ -179,11 +158,9 @@ class PushNotificationService {
 
       this.isInitialized = true;
       console.log('[PushNotificationService] ✅ Initialization complete');
-    } catch (error: any) {
-      console.error('[PushNotificationService] ❌ Initialization error:', error?.message || error);
-      // Don't throw - allow app to continue without push notifications
-      console.warn('[PushNotificationService] ⚠️ Continuing without push notifications');
-      this.isInitialized = true; // Mark as initialized to prevent retry loops
+    } catch (error) {
+      console.error('[PushNotificationService] ❌ Initialization error:', error);
+      this.isInitialized = false;
     }
   }
 

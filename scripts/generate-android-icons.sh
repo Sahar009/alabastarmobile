@@ -26,9 +26,9 @@ resize_image() {
     local height=$2
     local output=$3
     
-    # Add 30% padding (icon will be 40% of total size, centered - reduced from previous 48%)
-    local icon_width=$((width * 40 / 100))
-    local icon_height=$((height * 40 / 100))
+    # Add 35% padding (icon will be 30% of total size, centered - reduced for smaller icon)
+    local icon_width=$((width * 30 / 100))
+    local icon_height=$((height * 30 / 100))
     
     if command -v sips &> /dev/null; then
         # Create temporary resized icon

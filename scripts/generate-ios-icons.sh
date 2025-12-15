@@ -25,8 +25,8 @@ resize_image() {
     local size=$1
     local output=$2
     
-    # Add 30% padding (icon will be 40% of total size, centered - reduced from previous 48%)
-    local icon_size=$((size * 40 / 100))
+    # Add 35% padding (icon will be 30% of total size, centered - reduced for smaller icon)
+    local icon_size=$((size * 30 / 100))
     
     if command -v sips &> /dev/null; then
         # Create temporary resized icon
@@ -94,4 +94,3 @@ resize_image 1024 "$OUTPUT_DIR/AppIcon-1024.png" && echo "✅ Generated AppIcon-
 echo ""
 echo "🎉 iOS app icons generated successfully!"
 echo "📝 Icons generated from: $SOURCE_ICON"
-

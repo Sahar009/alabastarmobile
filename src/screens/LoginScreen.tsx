@@ -53,11 +53,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsLoading(true);
     try {
       await onLogin(email, password);
-    } catch (error: any) {
-      // Extract error message from the error object
-      const errorMessage = error?.message || 'Invalid email or password. Please try again.';
-      console.error('Login error details:', error);
-      Alert.alert('Login Failed', errorMessage);
+    } catch {
+      Alert.alert('Login Failed', 'Invalid email or password');
     } finally {
       setIsLoading(false);
     }

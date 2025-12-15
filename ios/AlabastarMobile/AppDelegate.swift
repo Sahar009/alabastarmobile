@@ -15,23 +15,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    // Initialize Firebase only if GoogleService-Info.plist exists and is valid
-    // Note: FirebaseApp.configure() throws NSException which Swift can't catch,
-    // but we check file existence first to minimize crash risk
-    if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
-       FileManager.default.fileExists(atPath: path),
-       let plist = NSDictionary(contentsOfFile: path),
-       let projectId = plist["PROJECT_ID"] as? String,
-       !projectId.isEmpty {
-      // File exists and has valid PROJECT_ID - configure Firebase
-      // If this throws NSException, the app will crash, but this should only happen
-      // if the file is malformed or Firebase SDK has issues
-      FirebaseApp.configure()
-      print("[AppDelegate] ✅ Firebase configured successfully")
-    } else {
-      print("[AppDelegate] ⚠️ GoogleService-Info.plist not found or invalid - Firebase disabled")
-      print("[AppDelegate] Push notifications and other Firebase features will not work")
-    }
+    // Initialize Firebase
+    FirebaseApp.configure()
     
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)

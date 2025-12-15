@@ -34,8 +34,8 @@ const iosSizes = [
 async function generateIcon(size, outputPath, isRound = false) {
   try {
     const actualSize = size;
-    // Add padding to make icon smaller (30% padding = 40% of original size, reduced from previous 48%)
-    const paddingPercent = 0.30;
+    // Add padding to make icon smaller (35% padding = 30% of original size, reduced for smaller icon)
+    const paddingPercent = 0.35;
     const iconSize = Math.floor(actualSize * (1 - paddingPercent * 2));
     const padding = Math.floor((actualSize - iconSize) / 2);
     
@@ -188,27 +188,3 @@ async function main() {
 }
 
 main();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -62,11 +62,11 @@ class ApiService {
   async setToken(token: string | null) {
     this.token = token;
     try {
-    if (token) {
-      await AsyncStorage.setItem('token', token);
-    } else {
-      await AsyncStorage.removeItem('token');
-    }
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+      } else {
+        await AsyncStorage.removeItem('token');
+      }
     } catch (error) {
       console.error('Error saving token:', error);
     }
@@ -77,7 +77,7 @@ class ApiService {
     try {
       const token = await AsyncStorage.getItem('token');
       if (token) {
-      this.token = token;
+        this.token = token;
       }
       return token;
     } catch (error) {
@@ -127,95 +127,17 @@ class ApiService {
       },
     };
 
-    // Calculate relative path once for logging
-    const relativePath = url.replace(this.baseURL, '');
-    
     try {
-      // Log request with relative path (not full URL) to avoid showing base URL in logs
-      console.log(`[API] Making request to: ${relativePath}`, {
-        method: config.method || 'GET',
-        hasBody: !!config.body,
-      });
-
       const response = await fetch(url, config);
-      
-      // Check if response is JSON before parsing
-      const contentType = response.headers.get('content-type');
-      const isJson = contentType && contentType.includes('application/json');
-      
-      let data: any;
-      
-      if (isJson) {
-        try {
-          data = await response.json();
-        } catch (jsonError) {
-          console.error('[API] Failed to parse JSON response:', jsonError);
-          const text = await response.text();
-          console.error('[API] Response text:', text);
-          throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
-        }
-      } else {
-        const text = await response.text();
-        console.warn('[API] Non-JSON response received:', text.substring(0, 200));
-        data = { message: text || `HTTP error! status: ${response.status}` };
-      }
+      const data = await response.json();
 
-      // Check both HTTP status and API success field
-      // Some APIs return 200 OK but with success: false in the body
-      if (!response.ok || (data && data.success === false)) {
-        // Extract error message from various possible formats
-        const errorMessage = 
-          data?.message || 
-          data?.error || 
-          data?.error?.message ||
-          (typeof data === 'string' ? data : null) ||
-          `HTTP error! status: ${response.status}`;
-        
-        // Log detailed error information (without full data object to reduce noise)
-        console.error('[API] Request failed:', {
-          url: relativePath, // Show relative path, not full URL
-          status: response.status,
-          statusText: response.statusText,
-          httpOk: response.ok,
-          apiSuccess: data?.success,
-          message: errorMessage,
-          // Only include data if it's small and relevant
-          ...(data && Object.keys(data).length < 5 ? { data } : {}),
-        });
-        
-        throw new Error(errorMessage);
+      if (!response.ok) {
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
-
-      // Log success with relative path
-      console.log(`[API] Request successful: ${relativePath}`, {
-        success: data?.success,
-        hasData: !!data?.data,
-      });
 
       return data;
-    } catch (error: any) {
-      // Handle network errors separately
-      if (error.message?.includes('Network request failed') || 
-          error.message?.includes('Failed to fetch') ||
-          error.message?.includes('NetworkError')) {
-        console.error('[API] Network error:', error);
-        throw new Error('Network error: Please check your internet connection');
-      }
-      
-      // Handle JSON parsing errors
-      if (error.message?.includes('JSON') || error.message?.includes('Unexpected token')) {
-        console.error('[API] JSON parsing error:', error);
-        throw new Error('Invalid response from server. Please try again.');
-      }
-      
-      // Re-throw other errors (including API errors with messages)
-      // Log error without full stack trace to avoid localhost:8081 noise in logs
-      console.error('[API] Request failed:', {
-        url: relativePath, // Use relative path instead of full URL
-        error: error.message,
-        // Only log first line of stack to avoid localhost:8081 noise
-        stackPreview: error.stack?.split('\n')[0],
-      });
+    } catch (error) {
+      console.error('API request failed:', error);
       throw error;
     }
   }
@@ -241,36 +163,9 @@ class ApiService {
   }
 
   async loginProvider(loginData: LoginData): Promise<ApiResponse<AuthResponse>> {
-    console.log('[API Service] 🚀 Provider login attempt:', { email: loginData.email });
-    try {
-      const response = await this.request<AuthResponse>('/auth/provider/login', {
-        method: 'POST',
-        body: JSON.stringify(loginData),
-      });
-      console.log('[API Service] ✅ Provider login response:', {
-        success: response.success,
-        message: response.message,
-        hasData: !!response.data,
-        userRole: response.data?.user?.role,
-      });
-      return response;
-    } catch (error: any) {
-      console.error('[API Service] ❌ Provider login error:', {
-        message: error.message,
-        endpoint: '/auth/provider/login',
-      });
-      // Provide more helpful error message
-      if (error.message?.includes('Invalid credentials')) {
-        throw new Error('Invalid credentials. Please ensure you are using a provider account. If you have a customer account, please register as a provider first.');
-      }
-      throw error;
-    }
-  }
-
-  async registerProvider(userData: RegisterData): Promise<ApiResponse<AuthResponse>> {
-    return this.request<AuthResponse>('/auth/provider/register', {
+    return this.request<AuthResponse>('/auth/provider/login', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(loginData),
     });
   }
 
@@ -344,7 +239,7 @@ class ApiService {
       if (params.startDate) queryParams.append('startDate', params.startDate);
       if (params.endDate) queryParams.append('endDate', params.endDate);
     }
-
+    
     const queryString = queryParams.toString();
     const endpoint = `/bookings${queryString ? `?${queryString}` : ''}`;
     
@@ -459,7 +354,7 @@ class ApiService {
     
     try {
       const response = await this.request<any>('/earnings/withdraw', {
-      method: 'POST',
+        method: 'POST',
         body: JSON.stringify(withdrawalData),
       });
       
@@ -718,10 +613,10 @@ class ApiService {
       // Update via user profile endpoint - works for both providers and customers
       const response = await this.request<any>('/auth/profile', {
         method: 'PUT',
-      body: JSON.stringify({
+        body: JSON.stringify({
           privacySettings: settings,
-      }),
-    });
+        }),
+      });
       
       console.log('[API Service] ✅ Privacy settings update response:', {
         success: response.success,
@@ -832,104 +727,6 @@ class ApiService {
       console.error('[API Service] ❌ Subscription plans error:', {
         message: error.message,
         endpoint: '/subscription-plans/plans',
-      });
-      throw error;
-    }
-  }
-
-  async initializeProviderSubscription(planId: string): Promise<ApiResponse<any>> {
-    console.log('[API Service] 🚀 Initializing provider subscription payment...', { planId });
-    
-    try {
-      const response = await this.request<any>('/subscriptions/initialize-payment', {
-        method: 'POST',
-        body: JSON.stringify({ planId, platform: 'mobile' }), // Specify mobile platform
-      });
-      
-      console.log('[API Service] ✅ Subscription payment initialization response:', {
-        success: response.success,
-        message: response.message,
-        hasData: !!response.data,
-        hasAuthorizationUrl: !!response.data?.authorization_url,
-      });
-      
-      return response;
-    } catch (error: any) {
-      console.error('[API Service] ❌ Subscription payment initialization error:', {
-        message: error.message,
-        endpoint: '/subscriptions/initialize-payment',
-      });
-      throw error;
-    }
-  }
-
-  async cancelProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
-    console.log('[API Service] 🚀 Cancelling provider subscription...', { subscriptionId });
-    
-    try {
-      const response = await this.request<any>('/subscriptions/cancel', {
-        method: 'POST',
-        body: JSON.stringify({ subscriptionId }),
-      });
-      
-      console.log('[API Service] ✅ Subscription cancellation response:', {
-        success: response.success,
-        message: response.message,
-      });
-      
-      return response;
-    } catch (error: any) {
-      console.error('[API Service] ❌ Subscription cancellation error:', {
-        message: error.message,
-        endpoint: '/subscriptions/cancel',
-      });
-      throw error;
-    }
-  }
-
-  async reactivateProviderSubscription(subscriptionId: string): Promise<ApiResponse<any>> {
-    console.log('[API Service] 🚀 Reactivating provider subscription...', { subscriptionId });
-    
-    try {
-      const response = await this.request<any>('/subscriptions/reactivate', {
-        method: 'POST',
-        body: JSON.stringify({ subscriptionId }),
-      });
-      
-      console.log('[API Service] ✅ Subscription reactivation response:', {
-        success: response.success,
-        message: response.message,
-      });
-      
-      return response;
-    } catch (error: any) {
-      console.error('[API Service] ❌ Subscription reactivation error:', {
-        message: error.message,
-        endpoint: '/subscriptions/reactivate',
-      });
-      throw error;
-    }
-  }
-
-  async verifySubscriptionPayment(reference: string): Promise<ApiResponse<any>> {
-    console.log('[API Service] 🚀 Verifying subscription payment...', { reference });
-    
-    try {
-      const response = await this.request<any>(`/subscriptions/verify-payment/${reference}`, {
-        method: 'GET',
-      });
-      
-      console.log('[API Service] ✅ Payment verification response:', {
-        success: response.success,
-        message: response.message,
-        hasData: !!response.data,
-      });
-      
-      return response;
-    } catch (error: any) {
-      console.error('[API Service] ❌ Payment verification error:', {
-        message: error.message,
-        endpoint: `/subscriptions/verify-payment/${reference}`,
       });
       throw error;
     }

@@ -9,7 +9,6 @@ import {
   Modal,
   Animated,
   Alert,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,7 +28,7 @@ import { apiService } from '../services/api';
 
 interface Booking {
   id: string;
-  status: 'requested' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'requested' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
   scheduledAt: string;
   customer?: {
     id: string;
@@ -221,7 +220,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
     await fetchBookings();
   };
 
-  const handleBookingAction = async (bookingId: string, action: 'confirm' | 'cancel') => {
+  const handleBookingAction = async (bookingId: string, action: 'confirm' | 'cancel' | 'complete') => {
     try {
       setProcessing(bookingId);
       
@@ -230,7 +229,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
       
       Alert.alert(
         'Success',
-        `Booking ${action === 'confirm' ? 'confirmed' : 'cancelled'} successfully`
+        `Booking ${action === 'confirm' ? 'confirmed' : action === 'cancel' ? 'cancelled' : 'completed'} successfully`
       );
       
       await fetchBookings();
@@ -262,38 +261,9 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
     });
   };
 
-  const openWhatsApp = (phone?: string) => {
-    if (!phone) {
-      Alert.alert('WhatsApp', 'No phone number available for this customer.');
-      return;
-    }
-
-    // Remove all non-digit characters except +
-    let sanitized = phone.replace(/[\s()-]/g, '');
-    
-    // Convert to international format if not already
-    if (sanitized.startsWith('0')) {
-      // Nigerian number starting with 0, replace with +234
-      sanitized = `+234${sanitized.substring(1)}`;
-    } else if (sanitized.startsWith('234')) {
-      sanitized = `+${sanitized}`;
-    } else if (!sanitized.startsWith('+')) {
-      sanitized = `+${sanitized}`;
-    }
-
-    // Remove + for WhatsApp URL
-    const whatsappNumber = sanitized.replace(/^\+/, '');
-    const whatsappUrl = `https://wa.me/${whatsappNumber}`;
-    
-    Linking.openURL(whatsappUrl).catch(error => {
-      console.error('WhatsApp error:', error);
-      Alert.alert('WhatsApp Failed', 'Unable to open WhatsApp. Please make sure WhatsApp is installed.');
-    });
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'accepted':
+      case 'confirmed':
         return '#10b981';
       case 'in_progress':
         return '#3b82f6';
@@ -308,7 +278,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'accepted':
+      case 'confirmed':
         return CheckCircle;
       case 'in_progress':
         return Clock;
@@ -325,7 +295,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
     switch (status) {
       case 'requested':
         return 'Pending';
-      case 'accepted':
+      case 'confirmed':
         return 'Confirmed';
       case 'in_progress':
         return 'In Progress';
@@ -346,18 +316,17 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
   const filters = [
     { key: 'all', label: 'All' },
     { key: 'requested', label: 'Pending' },
-    { key: 'accepted', label: 'Confirmed' },
+    { key: 'confirmed', label: 'Confirmed' },
     { key: 'in_progress', label: 'In Progress' },
     { key: 'completed', label: 'Completed' },
-    { key: 'cancelled', label: 'Cancelled' },
   ];
 
-        return (
+  return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Bookings</Text>
-            <TouchableOpacity 
+        <TouchableOpacity
           style={styles.refreshButton}
           onPress={onRefresh}
           disabled={refreshing}
@@ -367,7 +336,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
             color="#ec4899"
             style={refreshing ? styles.refreshingIcon : null}
           />
-            </TouchableOpacity>
+        </TouchableOpacity>
       </View>
 
       {/* Filter Tabs */}
@@ -378,7 +347,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
           contentContainerStyle={styles.filterContent}
         >
           {filters.map((filter) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={filter.key}
               style={[
                 styles.filterButton,
@@ -397,7 +366,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
             </TouchableOpacity>
           ))}
         </ScrollView>
-          </View>
+      </View>
 
       {/* Bookings List */}
       <ScrollView
@@ -433,7 +402,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
             const StatusIcon = getStatusIcon(booking.status);
             const statusColor = getStatusColor(booking.status);
 
-    return (
+            return (
               <TouchableOpacity
                 key={booking.id}
                 style={styles.bookingCard}
@@ -443,7 +412,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-        <View style={styles.bookingHeader}>
+                <View style={styles.bookingHeader}>
                   <View style={styles.bookingHeaderLeft}>
                     <View style={styles.bookingAvatar}>
                       {booking.customer?.avatarUrl ? (
@@ -451,7 +420,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                       ) : (
                         <User size={24} color="#ec4899" />
                       )}
-          </View>
+                    </View>
                     <View style={styles.bookingInfo}>
                       <Text style={styles.bookingCustomerName} numberOfLines={1}>
                         {booking.customer?.fullName || 'Customer'}
@@ -471,19 +440,19 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                     <Text style={[styles.statusText, { color: statusColor }]}>
                       {getStatusLabel(booking.status)}
                     </Text>
-          </View>
-        </View>
+                  </View>
+                </View>
 
                 <View style={styles.bookingDetails}>
                   <View style={styles.bookingDetailRow}>
-            <Calendar size={16} color="#64748b" />
+                    <Calendar size={16} color="#64748b" />
                     <Text style={styles.bookingDetailText}>
                       {formatDate(booking.scheduledAt)} at {formatTime(booking.scheduledAt)}
                     </Text>
-          </View>
+                  </View>
                   {booking.locationCity && (
                     <View style={styles.bookingDetailRow}>
-              <MapPin size={16} color="#64748b" />
+                      <MapPin size={16} color="#64748b" />
                       <Text style={styles.bookingDetailText} numberOfLines={1}>
                         {booking.locationCity}
                         {booking.locationState ? `, ${booking.locationState}` : ''}
@@ -494,17 +463,17 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                     <View style={styles.bookingNotes}>
                       <Text style={styles.bookingNotesText} numberOfLines={2}>
                         {booking.notes}
-              </Text>
-            </View>
-          )}
-        </View>
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
                 <View style={styles.bookingFooter}>
                   <Text style={styles.bookingDate}>
                     Booked {formatDate(booking.createdAt)}
                   </Text>
                   <ChevronRight size={20} color="#94a3b8" />
-          </View>
+                </View>
               </TouchableOpacity>
             );
           })
@@ -524,12 +493,12 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Booking Details</Text>
-              <TouchableOpacity
+                  <TouchableOpacity
                     onPress={() => setShowDetailsModal(false)}
                     style={styles.closeButton}
                   >
                     <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
+                  </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
@@ -559,8 +528,8 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                           </Text>
                         )}
                       </View>
-          </View>
-        </View>
+                    </View>
+                  </View>
 
                   {/* Service Info */}
                   <View style={styles.modalSection}>
@@ -568,7 +537,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                     <Text style={styles.modalValue}>
                       {selectedBooking.serviceTitle || 'Service'}
                     </Text>
-          </View>
+                  </View>
 
                   {/* Date & Time */}
                   <View style={styles.modalSection}>
@@ -576,7 +545,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                     <Text style={styles.modalValue}>
                       {formatDate(selectedBooking.scheduledAt)} at {formatTime(selectedBooking.scheduledAt)}
                     </Text>
-        </View>
+                  </View>
 
                   {/* Location */}
                   {(selectedBooking.locationCity || selectedBooking.locationAddress) && (
@@ -586,7 +555,7 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                         {selectedBooking.locationAddress ||
                           `${selectedBooking.locationCity || ''}${selectedBooking.locationState ? `, ${selectedBooking.locationState}` : ''}`}
                       </Text>
-      </View>
+                    </View>
                   )}
 
                   {/* Notes */}
@@ -622,40 +591,48 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                       >
                         {getStatusLabel(selectedBooking.status)}
                       </Text>
-          </View>
-          </View>
+                    </View>
+                  </View>
 
                   {/* Actions */}
                   {selectedBooking.status === 'requested' && (
                     <View style={styles.modalActions}>
-          <TouchableOpacity 
+                      <TouchableOpacity
                         style={[styles.actionButton, styles.confirmButton]}
                         onPress={() => handleBookingAction(selectedBooking.id, 'confirm')}
                         disabled={processing === selectedBooking.id}
                       >
-                        <CheckCircle size={18} color="#ffffff" />
-                        <Text style={styles.actionButtonText} numberOfLines={1} adjustsFontSizeToFit>
-                          Accept
-                        </Text>
+                        <CheckCircle size={20} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Confirm Booking</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.actionButton, styles.cancelButton]}
                         onPress={() => handleBookingAction(selectedBooking.id, 'cancel')}
                         disabled={processing === selectedBooking.id}
                       >
-                        <XCircle size={18} color="#ffffff" />
-                        <Text style={styles.actionButtonText} numberOfLines={1}>
-                          Decline
-                        </Text>
-          </TouchableOpacity>
-        </View>
+                        <XCircle size={20} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
 
+                  {selectedBooking.status === 'confirmed' && (
+                    <View style={styles.modalActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.completeButton]}
+                        onPress={() => handleBookingAction(selectedBooking.id, 'complete')}
+                        disabled={processing === selectedBooking.id}
+                      >
+                        <CheckCircle size={20} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Mark as Complete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
 
                   {/* Contact Actions */}
                   {selectedBooking.customer && (
                     <View style={styles.modalActions}>
-            <TouchableOpacity
+                      <TouchableOpacity
                         style={[styles.actionButton, styles.messageButton]}
                         onPress={() => {
                           setShowDetailsModal(false);
@@ -667,46 +644,32 @@ const ProviderBookingsScreen: React.FC<ProviderBookingsScreenProps> = ({
                           }
                         }}
                       >
-                        <MessageCircle size={18} color="#ffffff" />
-                        <Text style={styles.actionButtonText} numberOfLines={1} adjustsFontSizeToFit>
-                          Message
-              </Text>
-            </TouchableOpacity>
+                        <MessageCircle size={20} color="#ffffff" />
+                        <Text style={styles.actionButtonText}>Message Customer</Text>
+                      </TouchableOpacity>
 
                       {selectedBooking.customer?.phone && (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionButton, styles.phoneButton]}
-                            onPress={() => {
-                              // Handle phone call
-                              Alert.alert('Call Customer', `Call ${selectedBooking.customer?.fullName}?`);
-                            }}
-                          >
-                            <Phone size={18} color="#ec4899" />
-                            <Text style={[styles.actionButtonText, styles.phoneButtonText]} numberOfLines={1}>
-                              Call
-              </Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionButton, styles.whatsappButton]}
-                            onPress={() => openWhatsApp(selectedBooking.customer?.phone)}
-                          >
-                            <MessageCircle size={18} color="#25D366" />
-                            <Text style={[styles.actionButtonText, styles.whatsappButtonText]} numberOfLines={1}>
-                              WhatsApp
-                            </Text>
-                </TouchableOpacity>
-                        </>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.phoneButton]}
+                          onPress={() => {
+                            // Handle phone call
+                            Alert.alert('Call Customer', `Call ${selectedBooking.customer?.fullName}?`);
+                          }}
+                        >
+                          <Phone size={20} color="#ec4899" />
+                          <Text style={[styles.actionButtonText, styles.phoneButtonText]}>
+                            Call
+                          </Text>
+                        </TouchableOpacity>
                       )}
-              </View>
-                )}
-              </ScrollView>
+                    </View>
+                  )}
+                </ScrollView>
               </>
             )}
-            </View>
           </View>
-        </Modal>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1065,26 +1028,26 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginTop: 8,
-    flexWrap: 'wrap',
   },
   actionButton: {
     flex: 1,
-    minWidth: 100,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 16,
+    gap: 8,
   },
   confirmButton: {
     backgroundColor: '#10b981',
   },
   cancelButton: {
     backgroundColor: '#ef4444',
+  },
+  completeButton: {
+    backgroundColor: '#3b82f6',
   },
   messageButton: {
     backgroundColor: '#ec4899',
@@ -1094,22 +1057,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ec4899',
   },
-  whatsappButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: '#25D366',
-  },
   actionButtonText: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '700',
   },
   phoneButtonText: {
     color: '#ec4899',
-  },
-  whatsappButtonText: {
-    color: '#25D366',
   },
 });
 

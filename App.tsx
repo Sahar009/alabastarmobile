@@ -34,7 +34,6 @@ import MessagingScreen from './src/screens/MessagingScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import AboutScreen from './src/screens/AboutScreen';
 import HelpSupportScreen from './src/screens/HelpSupportScreen';
-import AllServicesScreen from './src/screens/AllServicesScreen';
 import BottomNavigation from './src/components/BottomNavigation';
 
 type AppScreen =
@@ -44,7 +43,6 @@ type AppScreen =
   | 'home'
   | 'location-selection'
   | 'providers'
-  | 'all-services'
   | 'profile'
   | 'notifications'
   | 'bookings'
@@ -77,17 +75,6 @@ function App() {
       try {
         // Wait longer for Firebase and native modules to be ready
         await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
-        
-        // Load saved userType first
-        try {
-          const savedUserType = await AsyncStorage.getItem('selectedUserType');
-          if (savedUserType === 'user' || savedUserType === 'provider') {
-            console.log('[App] Loaded saved userType:', savedUserType);
-            setUserType(savedUserType as 'user' | 'provider');
-          }
-        } catch (err) {
-          console.error('Error loading saved userType:', err);
-        }
         
         // Initialize in parallel with error handling
         await Promise.all([
@@ -210,13 +197,7 @@ function App() {
   };
 
   const handleUserTypeSelected = (type: 'user' | 'provider') => {
-    console.log('[App] User type selected:', type);
-    // Set both userType and screen together to ensure they're in sync
     setUserType(type);
-    // Save userType to AsyncStorage for persistence
-    AsyncStorage.setItem('selectedUserType', type).catch(err => {
-      console.error('Error saving userType:', err);
-    });
     setCurrentScreen('auth');
   };
 
@@ -302,12 +283,7 @@ function App() {
   };
 
   const handleBackToUserTypeSelection = () => {
-    console.log('[App] Back to user type selection - clearing userType');
     setUserType(null);
-    // Clear saved userType
-    AsyncStorage.removeItem('selectedUserType').catch(err => {
-      console.error('Error clearing userType:', err);
-    });
     setCurrentScreen('user-type-selection');
   };
 
@@ -437,19 +413,11 @@ function App() {
         return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
       
       case 'auth':
-        // Safety check: ensure userType is set before rendering AuthNavigator
-        if (!userType) {
-          console.warn('[App] userType is null when rendering auth screen, redirecting to user-type-selection');
-          // Don't call setCurrentScreen here as it causes infinite loop
-          // Instead, return the user type selection screen directly
-          return <UserTypeSelectionScreen onUserTypeSelected={handleUserTypeSelected} />;
-        }
-        console.log('[App] Rendering AuthNavigator with userType:', userType);
         return (
           <AuthNavigator 
             onAuthSuccess={handleAuthSuccess} 
             onBackToUserTypeSelection={handleBackToUserTypeSelection}
-            userType={userType}
+            userType={userType!}
           />
         );
       
@@ -462,8 +430,6 @@ function App() {
             onNavigate={(screen: string) => {
               if (screen === 'notifications') {
                 setCurrentScreen('notifications');
-              } else if (screen === 'all-services') {
-                setCurrentScreen('all-services');
               }
             }}
           />
@@ -487,15 +453,6 @@ function App() {
             selectedCategory={selectedCategory}
             selectedLocation={selectedLocation}
             searchQuery={searchQuery}
-          />
-        );
-      
-      case 'all-services':
-        return (
-          <AllServicesScreen
-            onCategorySelect={handleSelectCategory}
-            onBack={() => setCurrentScreen('home')}
-            selectedLocation={selectedLocation || 'Lagos'}
           />
         );
       

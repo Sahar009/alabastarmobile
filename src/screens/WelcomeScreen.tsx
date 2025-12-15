@@ -106,16 +106,10 @@ const styles = StyleSheet.create({
   logoContainer: {
     marginBottom: 60,
     alignItems: 'center',
-    justifyContent: 'center',
-    width: '50%',
-    maxWidth: 180,
   },
   logo: {
-    width: '100%',
-    height: undefined,
-    aspectRatio: 4096 / 1560, // Maintain logo aspect ratio
-    maxWidth: 180,
-    maxHeight: 69,
+    width: 120,
+    height: 80,
   },
   textContainer: {
     alignItems: 'center',
